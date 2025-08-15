@@ -1,9 +1,11 @@
-﻿import { useState, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { useDrag } from 'react-dnd'
 import type { Asset } from '../store'
+import { useAssetStore, useAllAssets, useAssetLoading, useAssetError } from '../store/assetStore'
+import { isImportedAsset } from '../services/assetPersistence'
 
 // Individual draggable asset item
-function AssetItem({ asset }: { asset: Asset }) {
+function AssetItem({ asset, onDelete }: { asset: Asset; onDelete?: (assetId: string) => void }) {
   const [{ isDragging }, drag] = useDrag(() => ({
     type: 'asset',
     item: { asset },
@@ -11,6 +13,9 @@ function AssetItem({ asset }: { asset: Asset }) {
       isDragging: !!monitor.isDragging(),
     }),
   }))
+  
+  const [showDelete, setShowDelete] = useState(false)
+  const canDelete = isImportedAsset(asset.id) && onDelete
 
   return (
     <div
@@ -25,8 +30,41 @@ function AssetItem({ asset }: { asset: Asset }) {
         textAlign: 'center',
         backgroundColor: '#1a1a1a',
         transition: 'opacity 0.2s',
+        position: 'relative',
       }}
+      onMouseEnter={() => setShowDelete(canDelete)}
+      onMouseLeave={() => setShowDelete(false)}
     >
+      {/* Delete button for imported assets */}
+      {showDelete && (
+        <button
+          onClick={(e) => {
+            e.stopPropagation()
+            onDelete?.(asset.id)
+          }}
+          style={{
+            position: 'absolute',
+            top: '2px',
+            right: '2px',
+            width: '16px',
+            height: '16px',
+            backgroundColor: '#ff4444',
+            border: 'none',
+            borderRadius: '50%',
+            color: '#fff',
+            fontSize: '10px',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 10
+          }}
+          title="Delete asset"
+        >
+          ×
+        </button>
+      )}
+      
       <img
         src={asset.thumb}
         alt={asset.name}
@@ -42,6 +80,17 @@ function AssetItem({ asset }: { asset: Asset }) {
       <div style={{ fontSize: '12px', color: '#ccc', fontWeight: '500' }}>
         {asset.name}
       </div>
+      {/* Indicate if asset is imported */}
+      {isImportedAsset(asset.id) && (
+        <div style={{ 
+          fontSize: '9px', 
+          color: '#888', 
+          marginTop: '2px',
+          fontStyle: 'italic'
+        }}>
+          imported
+        </div>
+      )}
     </div>
   )
 }
@@ -51,44 +100,35 @@ interface AssetPanelProps {
 }
 
 export function AssetPanel({ onAssetsUpdate }: AssetPanelProps = {}) {
-  const [assets, setAssets] = useState<Asset[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  // Use persistent asset store
+  const assets = useAllAssets()
+  const loading = useAssetLoading()
+  const error = useAssetError()
+  const assetStore = useAssetStore()
+  
+  // Local UI state
   const [importStatus, setImportStatus] = useState<string | null>(null)
   const [showGridSizeSelector, setShowGridSizeSelector] = useState(false)
   const [pendingFile, setPendingFile] = useState<File | null>(null)
   const [selectedGridSize, setSelectedGridSize] = useState({ width: 1, height: 1 })
   const [assetName, setAssetName] = useState('')
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null)
 
+  // Load assets on component mount
   useEffect(() => {
-    async function loadAssets() {
-      try {
-        const response = await fetch('/assets/manifest.json')
-        if (!response.ok) {
-          throw new Error(`Failed to load assets: ${response.statusText}`)
-        }
-        const data = await response.json()
-        // Ensure backward compatibility by adding default grid dimensions to assets that don't have them
-        const assetsWithGridDimensions = (data.assets || []).map((asset: any) => ({
-          ...asset,
-          gridWidth: asset.gridWidth || 1,
-          gridHeight: asset.gridHeight || 1
-        }))
-        setAssets(assetsWithGridDimensions)
-        // Notify parent about initial assets load
-        if (onAssetsUpdate) {
-          onAssetsUpdate(assetsWithGridDimensions)
-        }
-      } catch (err) {
-        console.error('Error loading assets:', err)
-        setError(err instanceof Error ? err.message : 'Unknown error')
-      } finally {
-        setLoading(false)
-      }
+    const loadAssets = async () => {
+      await assetStore.loadDefaultAssets()
+      await assetStore.loadImportedAssets()
     }
-
     loadAssets()
-  }, [])
+  }, []) // Remove assetStore dependency to prevent infinite loop
+  
+  // Notify parent when assets change
+  useEffect(() => {
+    if (onAssetsUpdate) {
+      onAssetsUpdate(assets)
+    }
+  }, [assets, onAssetsUpdate])
   
   const handleImportAsset = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
@@ -121,13 +161,13 @@ export function AssetPanel({ onAssetsUpdate }: AssetPanelProps = {}) {
     event.target.value = ''
   }
   
-  const confirmImportAsset = () => {
+  const confirmImportAsset = async () => {
     if (!pendingFile) return
     
     setImportStatus('Importing asset...')
     
     const reader = new FileReader()
-    reader.onload = (e) => {
+    reader.onload = async (e) => {
       const dataUrl = e.target?.result as string
       if (!dataUrl) return
       
@@ -143,15 +183,14 @@ export function AssetPanel({ onAssetsUpdate }: AssetPanelProps = {}) {
         gridHeight: selectedGridSize.height
       }
       
-      // Add to assets list
-      const updatedAssets = [...assets, newAsset]
-      setAssets(updatedAssets)
+      // Add to persistent asset store
+      const success = await assetStore.addAsset(newAsset)
       
-      // Notify parent component about the new asset
-      if (onAssetsUpdate) {
-        onAssetsUpdate(updatedAssets)
+      if (success) {
+        setImportStatus('Asset imported successfully!')
+      } else {
+        setImportStatus('Failed to save asset.')
       }
-      setImportStatus('Asset imported successfully!')
       
       // Clear status after 3 seconds
       setTimeout(() => setImportStatus(null), 3000)
@@ -178,6 +217,29 @@ export function AssetPanel({ onAssetsUpdate }: AssetPanelProps = {}) {
     setPendingFile(null)
     setSelectedGridSize({ width: 1, height: 1 })
     setAssetName('')
+  }
+  
+  const handleDeleteAsset = (assetId: string) => {
+    setShowDeleteConfirm(assetId)
+  }
+  
+  const confirmDeleteAsset = async () => {
+    if (!showDeleteConfirm) return
+    
+    const success = await assetStore.removeAsset(showDeleteConfirm)
+    if (success) {
+      setImportStatus('Asset deleted successfully!')
+      setTimeout(() => setImportStatus(null), 3000)
+    } else {
+      setImportStatus('Failed to delete asset.')
+      setTimeout(() => setImportStatus(null), 3000)
+    }
+    
+    setShowDeleteConfirm(null)
+  }
+  
+  const cancelDeleteAsset = () => {
+    setShowDeleteConfirm(null)
   }
 
   if (loading) {
@@ -482,6 +544,88 @@ export function AssetPanel({ onAssetsUpdate }: AssetPanelProps = {}) {
         </div>
       )}
       
+      {/* Delete Confirmation Modal */}
+      {showDeleteConfirm && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.7)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000
+        }}>
+          <div style={{
+            backgroundColor: '#2a2a2a',
+            border: '1px solid #444',
+            borderRadius: '8px',
+            padding: '20px',
+            minWidth: '300px',
+            maxWidth: '400px'
+          }}>
+            <h3 style={{ 
+              margin: '0 0 16px 0', 
+              fontSize: '16px', 
+              fontWeight: '600', 
+              color: '#fff',
+              textAlign: 'center'
+            }}>
+              Delete Asset
+            </h3>
+            
+            <div style={{ marginBottom: '20px', fontSize: '14px', color: '#ccc', textAlign: 'center' }}>
+              Are you sure you want to delete this asset?
+              <br />
+              <strong style={{ color: '#fff' }}>
+                {assets.find(a => a.id === showDeleteConfirm)?.name || 'Unknown Asset'}
+              </strong>
+              <br />
+              <span style={{ fontSize: '12px', color: '#888' }}>
+                This action cannot be undone.
+              </span>
+            </div>
+            
+            {/* Action buttons */}
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <button
+                onClick={cancelDeleteAsset}
+                style={{
+                  flex: 1,
+                  padding: '10px',
+                  backgroundColor: '#555',
+                  border: '1px solid #777',
+                  borderRadius: '4px',
+                  color: '#fff',
+                  fontSize: '12px',
+                  cursor: 'pointer'
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDeleteAsset}
+                style={{
+                  flex: 1,
+                  padding: '10px',
+                  backgroundColor: '#cc4444',
+                  border: '1px solid #dd5555',
+                  borderRadius: '4px',
+                  color: '#fff',
+                  fontSize: '12px',
+                  fontWeight: '500',
+                  cursor: 'pointer'
+                }}
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      
       <div
         style={{
           display: 'grid',
@@ -492,7 +636,7 @@ export function AssetPanel({ onAssetsUpdate }: AssetPanelProps = {}) {
         }}
       >
         {assets.map((asset) => (
-          <AssetItem key={asset.id} asset={asset} />
+          <AssetItem key={asset.id} asset={asset} onDelete={handleDeleteAsset} />
         ))}
       </div>
     </div>

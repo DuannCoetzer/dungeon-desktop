@@ -89,6 +89,70 @@ async fn save_map(app_handle: tauri::AppHandle, map_data: String) -> Result<bool
     }
 }
 
+// Command to read imported assets from app data directory
+#[tauri::command]
+async fn read_imported_assets(app_handle: tauri::AppHandle) -> Result<String, String> {
+    use tauri::Manager;
+    
+    let app_data_dir = app_handle.path().app_data_dir()
+        .map_err(|e| format!("Failed to get app data directory: {}", e))?;
+    
+    let assets_file = app_data_dir.join("imported_assets.json");
+    
+    // Create directory if it doesn't exist
+    if let Some(parent) = assets_file.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|e| format!("Failed to create app data directory: {}", e))?;
+    }
+    
+    match std::fs::read_to_string(&assets_file) {
+        Ok(contents) => Ok(contents),
+        Err(_) => Ok("[]".to_string()), // Return empty array if file doesn't exist
+    }
+}
+
+// Command to write imported assets to app data directory
+#[tauri::command]
+async fn write_imported_assets(app_handle: tauri::AppHandle, assets_data: String) -> Result<(), String> {
+    use tauri::Manager;
+    
+    let app_data_dir = app_handle.path().app_data_dir()
+        .map_err(|e| format!("Failed to get app data directory: {}", e))?;
+    
+    let assets_file = app_data_dir.join("imported_assets.json");
+    
+    // Create directory if it doesn't exist
+    if let Some(parent) = assets_file.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|e| format!("Failed to create app data directory: {}", e))?;
+    }
+    
+    match std::fs::write(&assets_file, assets_data) {
+        Ok(_) => Ok(()),
+        Err(e) => Err(format!("Failed to write imported assets: {}", e)),
+    }
+}
+
+// Command to clear imported assets file
+#[tauri::command]
+async fn clear_imported_assets(app_handle: tauri::AppHandle) -> Result<(), String> {
+    use tauri::Manager;
+    
+    let app_data_dir = app_handle.path().app_data_dir()
+        .map_err(|e| format!("Failed to get app data directory: {}", e))?;
+    
+    let assets_file = app_data_dir.join("imported_assets.json");
+    
+    if assets_file.exists() {
+        match std::fs::remove_file(&assets_file) {
+            Ok(_) => Ok(()),
+            Err(e) => Err(format!("Failed to remove imported assets file: {}", e)),
+        }
+    } else {
+        Ok(()) // File doesn't exist, nothing to clear
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -100,7 +164,10 @@ pub fn run() {
             read_file,
             write_file,
             load_map,
-            save_map
+            save_map,
+            read_imported_assets,
+            write_imported_assets,
+            clear_imported_assets
         ])
         .setup(|app| {
             if cfg!(debug_assertions) {
