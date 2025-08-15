@@ -1,0 +1,36 @@
+{
+  "assets": [
+    {
+      "id": "chest",
+      "name": "Treasure Chest",
+      "thumb": "/assets/thumbs/chest.svg",
+      "src": "/src/assets/objects/chest.svg",
+      "width": 32,
+      "height": 32
+    },
+    {
+      "id": "tree",
+      "name": "Tree",
+      "thumb": "/assets/thumbs/tree.svg", 
+      "src": "/src/assets/objects/tree.svg",
+      "width": 48,
+      "height": 64
+    },
+    {
+      "id": "rock",
+      "name": "Rock",
+      "thumb": "/assets/thumbs/rock.svg",
+      "src": "/src/assets/objects/rock.svg", 
+      "width": 24,
+      "height": 24
+    },
+    {
+      "id": "door",
+      "name": "Door",
+      "thumb": "/assets/thumbs/door.svg",
+      "src": "/src/assets/tiles/door.svg",
+      "width": 32,
+      "height": 32
+    }
+  ]
+}

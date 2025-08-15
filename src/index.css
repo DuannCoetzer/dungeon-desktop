@@ -1,0 +1,83 @@
+﻿:root {
+  --bg: #0f1115;
+  --panel: #111318;
+  --panel-border: #22262e;
+  --muted: #9aa4b2;
+  --text: #e5e7eb;
+  --accent: #7c8cff;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+  line-height: 1.5;
+}
+
+* { box-sizing: border-box; }
+
+html, body, #root { height: 100%; }
+
+body {
+  margin: 0;
+  background: var(--bg) url('./assets/backgrounds/dark-noise.svg');
+  background-size: 128px 128px;
+  background-attachment: fixed;
+  color: var(--text);
+}
+
+a { color: #cbd5e1; text-decoration: none; }
+
+a:hover { color: #ffffff; }
+
+button {
+  font-family: inherit;
+  font-size: 14px;
+  cursor: pointer;
+  background: #141821;
+  color: var(--text);
+  border: 1px solid #1f2430;
+  border-radius: 6px;
+}
+
+/* Fix workspace layout */
+.workspace {
+  display: grid;
+  grid-template-columns: 280px 1fr; /* Sidebar fixed width on left, canvas takes remaining space */
+  height: 100vh;
+  overflow: hidden;
+}
+
+.stage {
+  position: relative;
+  overflow: hidden;
+  background: #0f1115;
+}
+
+.canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: #0b0e14;
+}
+
+.sidebar {
+  background: #0d0f14;
+  border-right: 1px solid #22262e;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow-y: auto;
+  max-height: 100vh;
+}
+
+.toolbar-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.toolbar-title {
+  margin: 0 0 4px 0;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #a3aab8;
+  font-weight: 600;
+}

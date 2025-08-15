@@ -1,0 +1,119 @@
+.app-root {
+  display: flex;
+  flex-direction: column;
+  min-height: 100dvh;
+  background: #0f1115;
+  color: #e5e7eb;
+}
+
+.app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+  height: 56px;
+  background: #111318;
+  border-bottom: 1px solid #22262e;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+}
+.brand-logo {
+  width: 18px;
+  height: 18px;
+  display: inline-block;
+}
+.brand-name {
+  font-size: 14px;
+  color: #f3f4f6;
+}
+
+.top-nav {
+  display: flex;
+  gap: 16px;
+}
+.nav-link {
+  color: #cbd5e1;
+  font-size: 14px;
+}
+.nav-link:hover {
+  color: #ffffff;
+}
+
+.app-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.home {
+  padding: 24px;
+}
+.page-title {
+  margin: 0 0 8px;
+  font-size: 20px;
+}
+.muted {
+  color: #9aa4b2;
+}
+
+.workspace {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 240px 1fr;
+  min-height: 0;
+}
+
+.sidebar {
+  background: #0d0f14;
+  border-right: 1px solid #22262e;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.toolbar-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.toolbar-title {
+  margin: 0 0 4px 0;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #a3aab8;
+}
+.tool-button {
+  padding: 8px 10px;
+  background: #141821 url('../assets/ui/button-bg.svg');
+  background-size: 100% 100%;
+  color: #e5e7eb;
+  border: 1px solid #1f2430;
+  border-radius: 6px;
+  text-align: left;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.tool-button:hover {
+  background: #19202b;
+}
+
+.stage {
+  position: relative;
+  overflow: auto;
+  background: #0f1115;
+}
+.canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: #0b0e14;
+}

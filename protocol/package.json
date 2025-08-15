@@ -1,0 +1,34 @@
+{
+  "name": "@dungeon-desktop/protocol",
+  "version": "1.0.0",
+  "description": "Pure functions for map data manipulation in the Dungeon Desktop application",
+  "type": "module",
+  "main": "index.ts",
+  "types": "index.ts",
+  "scripts": {
+    "test": "node --loader ts-node/esm tests.ts",
+    "typecheck": "tsc --noEmit index.ts --target es2020 --module es2020 --moduleResolution node --skipLibCheck"
+  },
+  "keywords": [
+    "dungeon",
+    "map",
+    "protocol",
+    "pure-functions",
+    "game-development"
+  ],
+  "author": "Dungeon Desktop Team",
+  "license": "MIT",
+  "devDependencies": {
+    "typescript": "~5.8.3"
+  },
+  "exports": {
+    ".": "./index.ts",
+    "./types": "./types.ts",
+    "./map": "./map.ts",
+    "./utils": "./utils.ts"
+  },
+  "files": [
+    "*.ts",
+    "README.md"
+  ]
+}
