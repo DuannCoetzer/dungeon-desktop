@@ -1,6 +1,9 @@
 import type { Tool, PointerEventContext, RenderContext } from './Tool'
 import { useMapStore } from '../mapStore'
+import { useUIStore } from '../uiStore'
 import { setTile } from '../protocol'
+import { enhancedSmartAutoPlaceWallsForTiles } from '../utils/autoWall'
+import type { Palette } from '../store'
 
 export class RectTool implements Tool {
   readonly name = 'rect'
@@ -74,24 +77,37 @@ export class RectTool implements Tool {
   private drawRectangle(): void {
     if (!this.startTile || !this.currentTile) return
     
-    const state = useMapStore.getState()
+    const mapState = useMapStore.getState()
+    const uiState = useUIStore.getState()
     
     const x0 = Math.min(this.startTile.x, this.currentTile.x)
     const x1 = Math.max(this.startTile.x, this.currentTile.x)
     const y0 = Math.min(this.startTile.y, this.currentTile.y)
     const y1 = Math.max(this.startTile.y, this.currentTile.y)
     
+    // Collect all tile positions for auto-wall logic
+    const tilePositions: Array<{x: number, y: number, tileType: Palette}> = []
+    
     for (let y = y0; y <= y1; y++) {
       for (let x = x0; x <= x1; x++) {
-        if (state.selected === 'delete') {
+        if (mapState.selected === 'delete') {
           // Delete mode - erase tiles
-          state.eraseTile(x, y)
+          mapState.eraseTile(x, y)
         } else {
           // Draw mode - place tiles
-          const tileType = state.selected === 'wall' ? 'wall' : 'floor'
-          setTile(state.currentLayer, x, y, tileType)
+          setTile(mapState.currentLayer, x, y, mapState.selected)
+          
+          // Add to auto-wall positions if on floor layer
+          if (mapState.currentLayer === 'floor') {
+            tilePositions.push({ x, y, tileType: mapState.selected })
+          }
         }
       }
+    }
+    
+    // Auto-place walls for all floor tiles in the rectangle
+    if (tilePositions.length > 0) {
+      enhancedSmartAutoPlaceWallsForTiles(tilePositions, uiState.autoWallSettings)
     }
   }
 }

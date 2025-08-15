@@ -77,10 +77,19 @@ export interface ToolTempState {
   circle: CircleTempState
 }
 
+export interface AutoWallSettings {
+  enabled: boolean
+  defaultWallType: string // Which wall type to use for auto-placement
+  placement: 'adjacent' | 'surrounding' // Adjacent = only next to floors, Surrounding = completely around floors
+}
+
 export interface UIState {
   // Current tool state
   selectedTool: Tool
   brushSettings: BrushSettings
+  
+  // Auto-wall settings
+  autoWallSettings: AutoWallSettings
   
   // Generation parameters
   generationParams: GenerationParameters
@@ -133,6 +142,11 @@ export interface UIState {
   toggleSnapToGrid: () => void
   setGridSize: (size: number) => void
   
+  // Auto-wall actions
+  toggleAutoWall: () => void
+  setAutoWallType: (wallType: string) => void
+  setAutoWallPlacement: (placement: 'adjacent' | 'surrounding') => void
+  
   // Reset all temp state
   clearAllTempState: () => void
 }
@@ -174,6 +188,12 @@ const defaultViewportTransform: ViewportTransform = {
   scale: 1.0,
 }
 
+const defaultAutoWallSettings: AutoWallSettings = {
+  enabled: false,
+  defaultWallType: 'wall', // Default to basic wall
+  placement: 'surrounding', // Place walls surrounding floors by default (8-way)
+}
+
 const defaultToolTempState: ToolTempState = {
   polygon: {
     vertices: [],
@@ -200,6 +220,7 @@ export const useUIStore = create<UIState>((set, get) => ({
   // Initial state
   selectedTool: 'draw',
   brushSettings: { ...defaultBrushSettings },
+  autoWallSettings: { ...defaultAutoWallSettings },
   generationParams: { ...defaultGenerationParams },
   currentSelection: { ...defaultSelection },
   viewportTransform: { ...defaultViewportTransform },
@@ -374,6 +395,26 @@ export const useUIStore = create<UIState>((set, get) => ({
     gridSize: Math.max(1, size)
   }),
   
+  // Auto-wall actions
+  toggleAutoWall: () => set((state) => ({
+    autoWallSettings: {
+      ...state.autoWallSettings,
+      enabled: !state.autoWallSettings.enabled
+    }
+  })),
+  setAutoWallType: (wallType) => set((state) => ({
+    autoWallSettings: {
+      ...state.autoWallSettings,
+      defaultWallType: wallType
+    }
+  })),
+  setAutoWallPlacement: (placement) => set((state) => ({
+    autoWallSettings: {
+      ...state.autoWallSettings,
+      placement
+    }
+  })),
+  
   // Clear all temp state
   clearAllTempState: () => set({
     toolTempState: { ...defaultToolTempState },
@@ -405,3 +446,4 @@ export const useGridSettings = () => useUIStore(state => ({
   isSnapToGrid: state.isSnapToGrid,
   gridSize: state.gridSize,
 }))
+export const useAutoWallSettings = () => useUIStore(state => state.autoWallSettings)

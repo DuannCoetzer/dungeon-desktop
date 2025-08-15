@@ -12,7 +12,7 @@ import {
   TileWallWood
 } from '../assets'
 import { useMapStore, useSelectedPalette } from '../mapStore'
-import { useUIStore, useSelectedTool, useBrushSettings } from '../uiStore'
+import { useUIStore, useSelectedTool, useBrushSettings, useAutoWallSettings } from '../uiStore'
 import type { Palette } from '../store'
 
 interface TileInfo {
@@ -46,14 +46,14 @@ interface ToolSettingsPanelProps {
 
 export const ToolSettingsPanel: React.FC<ToolSettingsPanelProps> = ({ className = '' }) => {
   const [expandedCategory, setExpandedCategory] = useState<string>('floors')
-  const [autoWallMode, setAutoWallMode] = useState(false)
   
   // Store hooks
   const selectedTool = useSelectedTool()
   const selectedPalette = useSelectedPalette()
   const setSelectedPalette = useMapStore(state => state.setSelected)
   const brushSettings = useBrushSettings()
-  const { setBrushSize, setBrushOpacity } = useUIStore()
+  const autoWallSettings = useAutoWallSettings()
+  const { setBrushSize, setBrushOpacity, toggleAutoWall, setAutoWallType, setAutoWallPlacement } = useUIStore()
   
   // Group tiles by category
   const floorTiles = TILE_PALETTE.filter(tile => tile.category === 'floors')
@@ -176,22 +176,79 @@ export const ToolSettingsPanel: React.FC<ToolSettingsPanelProps> = ({ className 
         </div>
       )}
       
-      {/* Auto-Wall Toggle */}
+      {/* Auto-Wall Settings */}
       <div style={{ marginBottom: '16px', padding: '8px', background: '#0d1117', borderRadius: '4px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', marginBottom: '8px' }}>
           <input
             type="checkbox"
             id="autoWall"
-            checked={autoWallMode}
-            onChange={(e) => setAutoWallMode(e.target.checked)}
+            checked={autoWallSettings.enabled}
+            onChange={toggleAutoWall}
             style={{ margin: 0 }}
           />
           <label htmlFor="autoWall" style={{ color: '#e6e6e6', cursor: 'pointer' }}>
             Auto-place walls
           </label>
         </div>
+        
+        {autoWallSettings.enabled && (
+          <>
+            {/* Wall Type Selection */}
+            <div style={{ marginBottom: '8px' }}>
+              <label style={{ color: '#a8a8a8', fontSize: '11px', display: 'block', marginBottom: '4px' }}>
+                Default Wall Type:
+              </label>
+              <select
+                value={autoWallSettings.defaultWallType}
+                onChange={(e) => setAutoWallType(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '4px 6px',
+                  background: '#1f2430',
+                  border: '1px solid #2a3441',
+                  borderRadius: '3px',
+                  color: '#e6e6e6',
+                  fontSize: '11px'
+                }}
+              >
+                {wallTiles.map(wall => (
+                  <option key={wall.id} value={wall.id}>
+                    {wall.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            
+            {/* Placement Mode Selection */}
+            <div>
+              <label style={{ color: '#a8a8a8', fontSize: '11px', display: 'block', marginBottom: '4px' }}>
+                Placement Mode:
+              </label>
+              <select
+                value={autoWallSettings.placement}
+                onChange={(e) => setAutoWallPlacement(e.target.value as 'adjacent' | 'surrounding')}
+                style={{
+                  width: '100%',
+                  padding: '4px 6px',
+                  background: '#1f2430',
+                  border: '1px solid #2a3441',
+                  borderRadius: '3px',
+                  color: '#e6e6e6',
+                  fontSize: '11px'
+                }}
+              >
+                <option value="adjacent">Adjacent (4-way)</option>
+                <option value="surrounding">Surrounding (8-way)</option>
+              </select>
+            </div>
+          </>
+        )}
+        
         <div style={{ fontSize: '10px', color: '#a8a8a8', marginTop: '4px' }}>
-          Automatically adds walls around floor edges
+          {autoWallSettings.enabled 
+            ? 'Automatically places walls around floor edges using smart wall selection'
+            : 'Automatically adds walls around floor edges'
+          }
         </div>
       </div>
       

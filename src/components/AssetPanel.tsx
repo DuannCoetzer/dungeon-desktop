@@ -32,7 +32,7 @@ function AssetItem({ asset, onDelete }: { asset: Asset; onDelete?: (assetId: str
         transition: 'opacity 0.2s',
         position: 'relative',
       }}
-      onMouseEnter={() => setShowDelete(canDelete)}
+      onMouseEnter={() => setShowDelete(!!canDelete)}
       onMouseLeave={() => setShowDelete(false)}
     >
       {/* Delete button for imported assets */}
