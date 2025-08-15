@@ -1,7 +1,7 @@
 import { useState, useRef } from 'react'
 import { useMapStore, useAssetInstances } from '../mapStore'
 import { useUIStore } from '../uiStore'
-import { getSavedMaps } from '../services/tauri'
+import { getSavedMaps, exportMapData } from '../services/tauri'
 import { useAssetStore } from '../store/assetStore'
 
 export function FileOperationsPanel() {
@@ -228,6 +228,37 @@ export function FileOperationsPanel() {
     }
   }
   
+  const handleExportForAction = async () => {
+    if (isLoading) return
+    
+    setIsLoading(true)
+    setLastOperationStatus(null)
+    
+    try {
+      const mapData = exportMapData()
+      
+      // Create and download the JSON file
+      const blob = new Blob([mapData], { type: 'application/json' })
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `dungeon-map-${new Date().toISOString().split('T')[0]}.json`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      URL.revokeObjectURL(url)
+      
+      setLastOperationStatus('Map exported for Action Mode!')
+    } catch (error) {
+      console.error('Action Mode export failed:', error)
+      setLastOperationStatus('Export failed.')
+    } finally {
+      setIsLoading(false)
+      // Clear status after 3 seconds
+      setTimeout(() => setLastOperationStatus(null), 3000)
+    }
+  }
+  
   return (
     <div className="toolbar-section">
       <h3 className="toolbar-title">File</h3>
@@ -255,6 +286,18 @@ export function FileOperationsPanel() {
           title="Export current map as high-resolution PNG image"
         >
           🖼️ Export PNG {isLoading ? '...' : ''}
+        </button>
+        <button 
+          className="tool-button" 
+          onClick={handleExportForAction}
+          disabled={isLoading}
+          title="Export map as JSON for Action Mode viewing"
+          style={{
+            backgroundColor: '#2d4a2d',
+            border: '1px solid #4a7c59'
+          }}
+        >
+          🎭 Export for Action {isLoading ? '...' : ''}
         </button>
         
         {isDevelopmentMode && (
