@@ -433,18 +433,11 @@ export function ActionMapViewer({ mapData, onMoveCharacter, selectedCharacterId 
       const characterAtPoint = getCharacterAtPoint(worldPos.x, worldPos.y)
       
       if (characterAtPoint) {
-        // Calculate offset from character center to mouse position for smooth dragging
-        const tokenSize = characterAtPoint.size * TILE_SIZE
-        const characterCenterX = characterAtPoint.x * TILE_SIZE + TILE_SIZE / 2
-        const characterCenterY = characterAtPoint.y * TILE_SIZE + TILE_SIZE / 2
-        
-        const offsetX = worldPos.x - characterCenterX
-        const offsetY = worldPos.y - characterCenterY
-        
+        // Start dragging - character will move to tile under mouse cursor
         setIsDraggingCharacter(true)
         setDraggedCharacter(characterAtPoint.id)
         setLastMouse({ x: event.clientX, y: event.clientY })
-        setDragOffset({ x: offsetX, y: offsetY })
+        setDragOffset({ x: 0, y: 0 }) // No offset needed - mouse position determines tile
       }
       // If no character at point, do nothing
     }
@@ -452,16 +445,12 @@ export function ActionMapViewer({ mapData, onMoveCharacter, selectedCharacterId 
 
   const handleMouseMove = (event: React.MouseEvent) => {
     if (isDraggingCharacter && draggedCharacter && onMoveCharacter) {
-      // Handle character dragging with smooth following
+      // Handle character dragging - mouse position determines tile placement
       const worldPos = screenToWorld(event.clientX, event.clientY)
       
-      // Subtract the initial offset to make character follow mouse precisely
-      const targetX = worldPos.x - dragOffset.x
-      const targetY = worldPos.y - dragOffset.y
-      
-      // Convert to tile coordinates but snap to grid
-      const tileX = Math.round(targetX / TILE_SIZE)
-      const tileY = Math.round(targetY / TILE_SIZE)
+      // Convert mouse world position directly to tile coordinates
+      const tileX = Math.floor(worldPos.x / TILE_SIZE)
+      const tileY = Math.floor(worldPos.y / TILE_SIZE)
       
       // Only update if position actually changed to avoid unnecessary re-renders
       const currentCharacter = mapData.characters?.find(c => c.id === draggedCharacter)
