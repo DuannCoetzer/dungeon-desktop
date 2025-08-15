@@ -33,6 +33,7 @@ export function ActionMapViewer({ mapData, onMoveCharacter, selectedCharacterId 
   const [isDraggingCharacter, setIsDraggingCharacter] = useState(false)
   const [draggedCharacter, setDraggedCharacter] = useState<string | null>(null)
   const [lastMouse, setLastMouse] = useState({ x: 0, y: 0 })
+  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 })
 
   // Simple tile colors for rendering (since we don't have tile images in Action mode)
   const getTileColor = (tileType: string): string => {
@@ -432,18 +433,18 @@ export function ActionMapViewer({ mapData, onMoveCharacter, selectedCharacterId 
       const characterAtPoint = getCharacterAtPoint(worldPos.x, worldPos.y)
       
       if (characterAtPoint) {
-        if (selectedCharacterId === characterAtPoint.id) {
-          // Character is already selected - start dragging
-          setIsDraggingCharacter(true)
-          setDraggedCharacter(characterAtPoint.id)
-          setLastMouse({ x: event.clientX, y: event.clientY })
-        } else {
-          // Character is not selected - select it first (via onSelectCharacter callback if available)
-          // For now, we'll allow immediate dragging of any character
-          setIsDraggingCharacter(true)
-          setDraggedCharacter(characterAtPoint.id)
-          setLastMouse({ x: event.clientX, y: event.clientY })
-        }
+        // Calculate offset from character center to mouse position for smooth dragging
+        const tokenSize = characterAtPoint.size * TILE_SIZE
+        const characterCenterX = characterAtPoint.x * TILE_SIZE + TILE_SIZE / 2
+        const characterCenterY = characterAtPoint.y * TILE_SIZE + TILE_SIZE / 2
+        
+        const offsetX = worldPos.x - characterCenterX
+        const offsetY = worldPos.y - characterCenterY
+        
+        setIsDraggingCharacter(true)
+        setDraggedCharacter(characterAtPoint.id)
+        setLastMouse({ x: event.clientX, y: event.clientY })
+        setDragOffset({ x: offsetX, y: offsetY })
       }
       // If no character at point, do nothing
     }
@@ -451,16 +452,24 @@ export function ActionMapViewer({ mapData, onMoveCharacter, selectedCharacterId 
 
   const handleMouseMove = (event: React.MouseEvent) => {
     if (isDraggingCharacter && draggedCharacter && onMoveCharacter) {
-      // Handle character dragging
+      // Handle character dragging with smooth following
       const worldPos = screenToWorld(event.clientX, event.clientY)
-      const tileX = Math.round(worldPos.x / TILE_SIZE)
-      const tileY = Math.round(worldPos.y / TILE_SIZE)
       
-      // Update character position in real-time during drag (optimistic update)
-      onMoveCharacter(draggedCharacter, tileX, tileY)
-      setLastMouse({ x: event.clientX, y: event.clientY })
+      // Subtract the initial offset to make character follow mouse precisely
+      const targetX = worldPos.x - dragOffset.x
+      const targetY = worldPos.y - dragOffset.y
+      
+      // Convert to tile coordinates but snap to grid
+      const tileX = Math.round(targetX / TILE_SIZE)
+      const tileY = Math.round(targetY / TILE_SIZE)
+      
+      // Only update if position actually changed to avoid unnecessary re-renders
+      const currentCharacter = mapData.characters?.find(c => c.id === draggedCharacter)
+      if (currentCharacter && (currentCharacter.x !== tileX || currentCharacter.y !== tileY)) {
+        onMoveCharacter(draggedCharacter, tileX, tileY)
+      }
     } else if (isDragging) {
-      // Handle map panning (middle mouse button)
+      // Handle map panning (middle mouse button only)
       const deltaX = event.clientX - lastMouse.x
       const deltaY = event.clientY - lastMouse.y
       
@@ -476,15 +485,22 @@ export function ActionMapViewer({ mapData, onMoveCharacter, selectedCharacterId 
 
   const handleMouseUp = (event: React.MouseEvent) => {
     if (isDraggingCharacter && draggedCharacter) {
-      // Finish character drag - position already updated in handleMouseMove
+      // Finish character drag
       setIsDraggingCharacter(false)
       setDraggedCharacter(null)
+      setDragOffset({ x: 0, y: 0 })
     }
     
     setIsDragging(false)
   }
 
   const handleWheel = useCallback((event: WheelEvent) => {
+    // Don't zoom while dragging a character
+    if (isDraggingCharacter) {
+      event.preventDefault()
+      return
+    }
+    
     event.preventDefault()
     
     const rect = canvasRef.current?.getBoundingClientRect()
@@ -506,7 +522,7 @@ export function ActionMapViewer({ mapData, onMoveCharacter, selectedCharacterId 
       y: newY,
       scale: newScale
     })
-  }, [viewport])
+  }, [viewport, isDraggingCharacter])
 
   const handleResetView = () => {
     if (!canvasRef.current || !mapData) return
@@ -573,14 +589,17 @@ export function ActionMapViewer({ mapData, onMoveCharacter, selectedCharacterId 
     return () => window.removeEventListener('resize', resizeCanvas)
   }, [renderMap])
 
-  // Auto-fit map on initial load
+  // Auto-fit map on initial load (but not when characters move)
   useEffect(() => {
+    // Don't auto-fit if we're currently dragging a character
+    if (isDraggingCharacter) return
+    
     const timer = setTimeout(() => {
       handleResetView()
     }, 100) // Small delay to ensure canvas is ready
     
     return () => clearTimeout(timer)
-  }, [mapData])
+  }, [mapData.tiles, mapData.assetInstances]) // Only trigger on map structure changes, not character changes
 
   // Set up native wheel event listener to avoid passive event listener issues
   useEffect(() => {
