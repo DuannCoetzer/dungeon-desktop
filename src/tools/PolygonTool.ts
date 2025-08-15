@@ -129,14 +129,20 @@ export class PolygonTool implements Tool {
     if (this.vertices.length < 3) return
     
     const state = useMapStore.getState()
-    const tileType = state.selected === 'wall' ? 'wall' : 'floor'
     
     // Get all points for the polygon
     const polygonPoints = this.filled ? fillPolygon(this.vertices) : strokePolygon(this.vertices)
     
-    // Set tiles for all points using protocol
+    // Apply action for all points
     polygonPoints.forEach(point => {
-      setTile(state.currentLayer, point.x, point.y, tileType)
+      if (state.selected === 'delete') {
+        // Delete mode - erase tiles
+        state.eraseTile(point.x, point.y)
+      } else {
+        // Draw mode - place tiles
+        const tileType = state.selected === 'wall' ? 'wall' : 'floor'
+        setTile(state.currentLayer, point.x, point.y, tileType)
+      }
     })
     
     // Reset for next polygon

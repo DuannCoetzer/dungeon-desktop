@@ -120,14 +120,20 @@ export class FreehandTool implements Tool {
 
   private stampTile(centerX: number, centerY: number): void {
     const state = useMapStore.getState()
-    const tileType = state.selected === 'wall' ? 'wall' : 'floor'
     
     // Get all tiles affected by the brush
     const brushTiles = this.getBrushTiles(centerX, centerY)
     
-    // Set tiles for all brush tiles using protocol
+    // Apply action for all brush tiles
     brushTiles.forEach(tile => {
-      setTile(state.currentLayer, tile.x, tile.y, tileType)
+      if (state.selected === 'delete') {
+        // Delete mode - erase tiles
+        state.eraseTile(tile.x, tile.y)
+      } else {
+        // Draw mode - place tiles
+        const tileType = state.selected === 'wall' ? 'wall' : 'floor'
+        setTile(state.currentLayer, tile.x, tile.y, tileType)
+      }
     })
   }
 

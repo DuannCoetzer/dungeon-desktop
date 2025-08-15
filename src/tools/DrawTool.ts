@@ -8,12 +8,12 @@ export class DrawTool implements Tool {
 
   onDown(context: PointerEventContext): void {
     this.isDown = true
-    this.drawTile(context)
+    this.performAction(context)
   }
 
   onMove(context: PointerEventContext): void {
     if (!this.isDown) return
-    this.drawTile(context)
+    this.performAction(context)
   }
 
   onUp(_context: PointerEventContext): void {
@@ -26,6 +26,17 @@ export class DrawTool implements Tool {
 
   renderPreview(_renderContext: RenderContext): void {
     // DrawTool doesn't need preview rendering
+  }
+
+  private performAction(context: PointerEventContext): void {
+    const state = useMapStore.getState()
+    
+    if (state.selected === 'delete') {
+      // Delete mode - erase tiles on the current layer
+      state.eraseTile(context.tileX, context.tileY)
+    } else {
+      this.drawTile(context)
+    }
   }
 
   private drawTile(context: PointerEventContext): void {

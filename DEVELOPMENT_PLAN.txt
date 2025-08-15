@@ -16,7 +16,7 @@ Grid System:
 ✓ Test grid snapping for asset placement works correctly
 ✓ Verify "Show Grid" toggle functionality
 ✓ Verify "Snap to Grid" toggle functionality
-□ Test grid scaling with zoom levels
+✓ Test grid scaling with zoom levels
 □ Add grid size adjustment controls
 □ Implement different grid types (square, hex, etc.)
 
@@ -33,14 +33,14 @@ PHASE 2: DRAWING TOOLS ENHANCEMENT
 ==================================
 
 Basic Drawing Tools:
-□ Test draw tool works with left-click
+✓ Test draw tool works with left-click
 □ Test erase tool works correctly
-□ Verify palette selection (grass/wall tiles)
-□ Test rectangle tool functionality
-□ Test line tool functionality
-□ Test circle tool functionality
-□ Test polygon tool functionality
-□ Test freehand drawing tool
+✓ Verify palette selection (grass/wall tiles)
+✓ Test rectangle tool functionality
+✓ Test line tool functionality
+✓ Test circle tool functionality
+✓ Test polygon tool functionality
+✓ Test freehand drawing tool
 
 Advanced Drawing Features:
 □ Add brush size controls for drawing tools
@@ -53,14 +53,15 @@ Advanced Drawing Features:
 □ Add eyedropper tool for copying tile types
 
 Layer System:
-□ Test layer visibility toggles
-□ Test layer opacity controls
-□ Verify layer selection works correctly
+✓ Test layer visibility toggles
+✓ Test layer opacity controls
+✓ Verify layer selection works correctly
 □ Add layer ordering controls
 □ Implement layer blending modes
 □ Add layer locking functionality
 □ Implement layer grouping
 □ Add layer naming/renaming
+□ Add Dynamic Multilayer functionality
 
 PHASE 3: ADVANCED FEATURES
 ==========================
@@ -75,8 +76,8 @@ Selection System:
 □ Add selection border/outline effects
 
 Camera & Navigation:
-□ Test zoom in/out with mouse wheel
-□ Test pan with middle mouse button
+✓ Test zoom in/out with mouse wheel
+✓ Test pan with middle mouse button
 □ Add zoom to fit functionality
 □ Add zoom to selection
 □ Implement minimap for navigation

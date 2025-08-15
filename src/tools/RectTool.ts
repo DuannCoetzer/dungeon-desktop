@@ -75,7 +75,6 @@ export class RectTool implements Tool {
     if (!this.startTile || !this.currentTile) return
     
     const state = useMapStore.getState()
-    const tileType = state.selected === 'wall' ? 'wall' : 'floor'
     
     const x0 = Math.min(this.startTile.x, this.currentTile.x)
     const x1 = Math.max(this.startTile.x, this.currentTile.x)
@@ -84,7 +83,14 @@ export class RectTool implements Tool {
     
     for (let y = y0; y <= y1; y++) {
       for (let x = x0; x <= x1; x++) {
-        setTile(state.currentLayer, x, y, tileType)
+        if (state.selected === 'delete') {
+          // Delete mode - erase tiles
+          state.eraseTile(x, y)
+        } else {
+          // Draw mode - place tiles
+          const tileType = state.selected === 'wall' ? 'wall' : 'floor'
+          setTile(state.currentLayer, x, y, tileType)
+        }
       }
     }
   }

@@ -1,0 +1,478 @@
+/* Map Mode Selector Styles */
+
+/* Simple toggle selector */
+.mode-selector-simple {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.mode-selector-label {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #e5e5e5;
+  margin-bottom: 4px;
+}
+
+.mode-toggle-group {
+  display: flex;
+  background: #1a1a1a;
+  border: 1px solid #404040;
+  border-radius: 6px;
+  padding: 3px;
+  gap: 2px;
+  width: 100%;
+  overflow: hidden;
+}
+
+.mode-toggle-option {
+  flex: 1;
+  cursor: pointer;
+  position: relative;
+  min-width: 0; /* Prevent flex items from overflowing */
+}
+
+.mode-radio {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+  width: 0;
+  height: 0;
+}
+
+.mode-toggle-button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 6px 4px;
+  border-radius: 4px;
+  background: transparent;
+  color: #aaa;
+  font-size: 0.75rem;
+  font-weight: 500;
+  transition: all 0.2s ease;
+  text-align: center;
+  width: 100%;
+  min-height: 44px;
+  box-sizing: border-box;
+}
+
+.mode-toggle-option.active .mode-toggle-button {
+  background: #3b82f6;
+  color: white;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+.mode-toggle-option:not(.active):hover .mode-toggle-button {
+  background: #2a2a2a;
+  color: #e5e5e5;
+}
+
+.mode-toggle-button .mode-icon {
+  font-size: 1.1rem;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.mode-toggle-button .mode-label {
+  font-size: 0.7rem;
+  font-weight: 600;
+  line-height: 1.1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  width: 100%;
+}
+
+/* Horizontal layout */
+.mode-selector-horizontal {
+  flex-direction: row;
+  gap: 0;
+}
+
+.mode-selector-horizontal .mode-button {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 1rem;
+  background: transparent;
+  border: none;
+  border-right: 1px solid #404040;
+  color: #e5e5e5;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  position: relative;
+  min-height: 80px;
+}
+
+.mode-selector-horizontal .mode-button:last-child {
+  border-right: none;
+}
+
+.mode-selector-horizontal .mode-button:hover:not(.disabled) {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.mode-selector-horizontal .mode-button.active {
+  background: var(--mode-primary, #3b82f6);
+  color: white;
+}
+
+.mode-selector-horizontal .mode-button.disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Vertical/dropdown layout */
+.mode-selector-vertical {
+  flex-direction: column;
+  position: relative;
+  min-width: 300px;
+}
+
+.mode-current-button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem;
+  background: var(--mode-primary, #3b82f6);
+  border: none;
+  color: white;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  width: 100%;
+}
+
+.mode-current-button:hover:not(:disabled) {
+  background: var(--mode-secondary, #2563eb);
+}
+
+.mode-current-button.expanded {
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.mode-current-display {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex: 1;
+}
+
+.mode-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  background: #2a2a2a;
+  border: 1px solid #404040;
+  border-top: none;
+  border-radius: 0 0 8px 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  z-index: 1000;
+}
+
+.mode-option {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 1rem;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid #404040;
+  color: #e5e5e5;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  width: 100%;
+}
+
+.mode-option:last-child {
+  border-bottom: none;
+}
+
+.mode-option:hover:not(:disabled) {
+  background: var(--mode-primary, #3b82f6);
+  color: white;
+}
+
+.mode-option:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Mode content styles */
+.mode-icon {
+  font-size: 1.5rem;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.mode-info {
+  flex: 1;
+  text-align: left;
+}
+
+.mode-name {
+  font-weight: 600;
+  font-size: 0.9rem;
+  margin-bottom: 0.25rem;
+  line-height: 1.2;
+}
+
+.mode-description {
+  font-size: 0.75rem;
+  opacity: 0.8;
+  line-height: 1.3;
+}
+
+.mode-arrow {
+  font-size: 0.8rem;
+  transition: transform 0.2s ease;
+}
+
+.mode-arrow.up {
+  transform: rotate(180deg);
+}
+
+/* Loading states */
+.mode-loading {
+  position: absolute;
+  top: 50%;
+  right: 1rem;
+  transform: translateY(-50%);
+}
+
+.loading-spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top: 2px solid white;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+.loading-spinner-small {
+  width: 12px;
+  height: 12px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top: 2px solid var(--mode-primary, #3b82f6);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* Compact mode selector */
+.mode-selector-compact {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.current-mode-indicator {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  background: var(--mode-primary, #3b82f6);
+  color: white;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  position: relative;
+}
+
+.current-mode-indicator:hover {
+  background: var(--mode-accent, #2563eb);
+}
+
+.mode-name-short {
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.mode-tooltip {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: 0.5rem;
+  background: #2a2a2a;
+  border: 1px solid #404040;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  z-index: 1000;
+  min-width: 250px;
+}
+
+.tooltip-content {
+  padding: 1rem;
+}
+
+.tooltip-title {
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: white;
+  margin-bottom: 0.5rem;
+}
+
+.tooltip-description {
+  font-size: 0.8rem;
+  color: #aaaaaa;
+  margin-bottom: 1rem;
+  line-height: 1.4;
+}
+
+.tooltip-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.tooltip-mode-option {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem;
+  background: #1f1f1f;
+  border: 1px solid #404040;
+  border-radius: 4px;
+  color: #e5e5e5;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-size: 0.85rem;
+}
+
+.tooltip-mode-option:hover:not(:disabled) {
+  background: #3b82f6;
+  color: white;
+}
+
+.tooltip-mode-option:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.mode-switching-indicator {
+  margin-left: 0.5rem;
+}
+
+/* Status indicator */
+.mode-status-indicator {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.25rem 0.5rem;
+  background: var(--mode-primary, #3b82f6);
+  color: white;
+  border-radius: 4px;
+  font-size: 0.8rem;
+}
+
+.mode-status-indicator .mode-icon {
+  font-size: 1rem;
+}
+
+.mode-status-indicator .mode-text {
+  font-weight: 500;
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+  .mode-selector-horizontal {
+    flex-direction: column;
+  }
+  
+  .mode-selector-horizontal .mode-button {
+    border-right: none;
+    border-bottom: 1px solid #404040;
+    min-height: 60px;
+  }
+  
+  .mode-selector-horizontal .mode-button:last-child {
+    border-bottom: none;
+  }
+  
+  .mode-description {
+    display: none;
+  }
+  
+  .mode-tooltip {
+    left: auto;
+    right: 0;
+    min-width: 200px;
+  }
+  
+  .mode-selector-vertical {
+    min-width: 250px;
+  }
+  
+  .mode-toggle-button .mode-label {
+    font-size: 0.65rem;
+  }
+  
+  .mode-toggle-button .mode-icon {
+    font-size: 1rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .mode-selector-horizontal .mode-button {
+    padding: 0.75rem;
+    min-height: 50px;
+  }
+  
+  .mode-icon {
+    font-size: 1.25rem;
+  }
+  
+  .mode-name {
+    font-size: 0.85rem;
+  }
+  
+  .mode-tooltip {
+    min-width: 180px;
+  }
+}
+
+/* Theme-specific adjustments */
+.mode-selector-horizontal .mode-button.active[style*="--mode-primary"] {
+  box-shadow: inset 0 -3px 0 var(--mode-accent, #3b82f6);
+}
+
+.mode-current-button[style*="--mode-primary"] {
+  background: var(--mode-primary);
+}
+
+.mode-current-button[style*="--mode-primary"]:hover {
+  background: var(--mode-secondary);
+}
+
+/* Animation for mode switching */
+.mode-selector.switching {
+  pointer-events: none;
+  opacity: 0.8;
+}
+
+.mode-selector.switching .mode-button {
+  cursor: not-allowed;
+}
+
+/* Focus states for accessibility */
+.mode-button:focus,
+.mode-current-button:focus,
+.mode-option:focus {
+  outline: 2px solid var(--mode-accent, #3b82f6);
+  outline-offset: 2px;
+}
+
+.current-mode-indicator:focus {
+  outline: 2px solid var(--mode-accent, #3b82f6);
+  outline-offset: 2px;
+}

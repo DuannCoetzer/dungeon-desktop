@@ -5,7 +5,9 @@ import type { Asset } from '../store'
 
 // Check if we're running in Tauri (desktop) or web development mode
 const isTauriApp = () => {
-  return typeof window !== 'undefined' && (window as any).__TAURI__ !== undefined
+  const hasTauri = typeof window !== 'undefined' && (window as any).__TAURI__ !== undefined
+  console.log('Tauri detection:', { hasTauri, windowTauri: (window as any).__TAURI__ })
+  return hasTauri
 }
 
 // Dynamic import of Tauri API to avoid errors in web mode
@@ -53,12 +55,18 @@ export async function loadImportedAssets(): Promise<Asset[]> {
 export async function saveImportedAssets(assets: Asset[]): Promise<boolean> {
   try {
     const assetsJson = JSON.stringify(assets, null, 2)
+    console.log('Saving assets:', { count: assets.length, totalSize: assetsJson.length, isTauri: isTauriApp() })
     
     if (!isTauriApp()) {
       // In web mode, use localStorage
-      localStorage.setItem(STORAGE_KEY, assetsJson)
-      console.log('Imported assets saved to browser storage')
-      return true
+      try {
+        localStorage.setItem(STORAGE_KEY, assetsJson)
+        console.log('Imported assets saved to browser storage')
+        return true
+      } catch (storageError) {
+        console.error('LocalStorage error:', storageError)
+        throw storageError
+      }
     }
     
     // In Tauri mode, save to file

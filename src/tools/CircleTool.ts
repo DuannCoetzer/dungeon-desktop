@@ -104,7 +104,6 @@ export class CircleTool implements Tool {
     if (!this.centerTile || !this.currentTile) return
     
     const state = useMapStore.getState()
-    const tileType = state.selected === 'wall' ? 'wall' : 'floor'
     
     // Calculate radius from center to current position
     const dx = this.currentTile.x - this.centerTile.x
@@ -119,9 +118,16 @@ export class CircleTool implements Tool {
       this.filled
     )
     
-    // Set tiles for all points using protocol
+    // Apply action for all points
     circlePoints.forEach(point => {
-      setTile(state.currentLayer, point.x, point.y, tileType)
+      if (state.selected === 'delete') {
+        // Delete mode - erase tiles
+        state.eraseTile(point.x, point.y)
+      } else {
+        // Draw mode - place tiles
+        const tileType = state.selected === 'wall' ? 'wall' : 'floor'
+        setTile(state.currentLayer, point.x, point.y, tileType)
+      }
     })
   }
 }

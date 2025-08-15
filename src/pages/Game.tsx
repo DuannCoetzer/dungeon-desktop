@@ -1,4 +1,4 @@
-﻿import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useDrop } from 'react-dnd'
 import { IconSelect, IconDraw, IconErase, TileGrass, TileWall } from '../assets'
 import { useMapStore, useCurrentLayer, useLayerSettings, useSelectedPalette, useAssetInstances } from '../mapStore'
@@ -10,13 +10,13 @@ import { AssetPanel } from '../components/AssetPanel'
 import { AssetInstanceComponent } from '../components/AssetInstance'
 import { GenerationParametersPanel } from '../components/GenerationParametersPanel'
 import { FileOperationsPanel } from '../components/FileOperationsPanel'
+import { useAllAssets } from '../store/assetStore'
 
 const TILE = 32
 
 export default function Game() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const stageRef = useRef<HTMLElement | null>(null)
-  const [assets, setAssets] = useState<Asset[]>([])
   const [, setDragTransform] = useState({ scale: 1, offsetX: 0, offsetY: 0 })
 
   // UI state from UI store
@@ -34,30 +34,12 @@ export default function Game() {
   const addAssetInstance = useMapStore(state => state.addAssetInstance)
   // const clearAssetSelection = useMapStore(state => state.clearAssetSelection)
 
+  // Assets from persistent store
+  const assets = useAllAssets()
+
   // Camera transform state - exposed to track canvas transforms
   const [cameraTransform, setCameraTransform] = useState({ scale: 1, offsetX: 0, offsetY: 0 })
 
-  // Load assets from manifest
-  useEffect(() => {
-    async function loadAssets() {
-      try {
-        const response = await fetch('/assets/manifest.json')
-        if (response.ok) {
-          const data = await response.json()
-          // Ensure backward compatibility by adding default grid dimensions
-          const assetsWithGridDimensions = (data.assets || []).map((asset: any) => ({
-            ...asset,
-            gridWidth: asset.gridWidth || 1,
-            gridHeight: asset.gridHeight || 1
-          }))
-          setAssets(assetsWithGridDimensions)
-        }
-      } catch (error) {
-        console.error('Failed to load assets:', error)
-      }
-    }
-    loadAssets()
-  }, [])
 
   // Handle asset drop on canvas
   const [{ isOver }, drop] = useDrop(() => ({
@@ -655,6 +637,19 @@ export default function Game() {
             >
               <img src={TileWall} alt="Wall" style={{ width: '24px', height: '24px' }} />
             </button>
+            <button 
+              className={`palette-btn ${selected === 'delete' ? 'active' : ''}`}
+              onClick={() => setSelected('delete')}
+              title="Delete Tiles"
+              style={{ 
+                padding: '8px', 
+                background: selected === 'delete' ? '#7c8cff' : '#141821',
+                border: '1px solid #1f2430',
+                borderRadius: '4px'
+              }}
+            >
+              <img src={IconErase} alt="Delete" style={{ width: '24px', height: '24px' }} />
+            </button>
           </div>
         </div>
 
@@ -699,16 +694,7 @@ export default function Game() {
           </div>
         </div>
 
-        <AssetPanel 
-          onAssetsUpdate={(newAssets) => {
-            // Merge imported assets with existing assets
-            setAssets(prev => {
-              const existingIds = prev.map(a => a.id)
-              const uniqueNewAssets = newAssets.filter(a => !existingIds.includes(a.id))
-              return [...prev, ...uniqueNewAssets]
-            })
-          }}
-        />
+        <AssetPanel />
         <GenerationParametersPanel />
       </div>
 

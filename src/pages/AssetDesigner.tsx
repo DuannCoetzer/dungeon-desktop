@@ -22,6 +22,9 @@ const DEFAULT_CATEGORIES: AssetCategory[] = [
 
 export default function AssetDesigner() {
   const assetStore = useAssetStore()
+  const allAssets = useAssetStore(state => state.allAssets)
+  const importedAssets = useAssetStore(state => state.importedAssets) 
+  const defaultAssets = useAssetStore(state => state.defaultAssets)
   const [selectedAsset, setSelectedAsset] = useState<Asset | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedCategory, setSelectedCategory] = useState<string>('all')
@@ -37,10 +40,10 @@ export default function AssetDesigner() {
       await assetStore.loadImportedAssets()
     }
     loadAssets()
-  }, [])
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Filter and sort assets
-  const filteredAssets = assetStore.allAssets
+  const filteredAssets = allAssets
     .filter(asset => {
       const matchesSearch = asset.name.toLowerCase().includes(searchQuery.toLowerCase())
       const matchesCategory = selectedCategory === 'all' || 
@@ -100,11 +103,11 @@ export default function AssetDesigner() {
   }
 
   const getAssetStats = () => {
-    const total = assetStore.allAssets.length
-    const imported = assetStore.importedAssets.length
-    const defaultCount = assetStore.defaultAssets.length
+    const total = allAssets.length
+    const imported = importedAssets.length
+    const defaultCount = defaultAssets.length
     const categories = DEFAULT_CATEGORIES.reduce((acc, cat) => {
-      acc[cat.id] = assetStore.allAssets.filter(asset => 
+      acc[cat.id] = allAssets.filter(asset => 
         (asset as any).category === cat.id || 
         (cat.id === 'uncategorized' && !(asset as any).category)
       ).length
@@ -464,27 +467,329 @@ function AssetDetailsPanel({
 
 // Import assets dialog component
 function ImportAssetsDialog({ onClose }: { onClose: () => void }) {
+  const assetStore = useAssetStore()
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([])
+  const [importing, setImporting] = useState(false)
+  const [importProgress, setImportProgress] = useState<{ current: number, total: number }>({ current: 0, total: 0 })
+  const [importResults, setImportResults] = useState<{ success: number, failed: number, errors: string[] }>({ success: 0, failed: 0, errors: [] })
+  const [showResults, setShowResults] = useState(false)
+  const [defaultCategory, setDefaultCategory] = useState('uncategorized')
+  const [defaultGridSize, setDefaultGridSize] = useState({ width: 1, height: 1 })
+  const [autoDetectSize, setAutoDetectSize] = useState(true)
+
+  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files || [])
+    const validFiles = files.filter(file => {
+      const validTypes = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp', 'image/gif']
+      const maxSize = 10 * 1024 * 1024 // 10MB
+      return validTypes.includes(file.type) && file.size <= maxSize
+    })
+    
+    setSelectedFiles(validFiles)
+    
+    if (validFiles.length !== files.length) {
+      const invalid = files.length - validFiles.length
+      alert(`${invalid} file(s) were skipped (invalid format or too large)`)
+    }
+  }
+
+  const removeFile = (index: number) => {
+    setSelectedFiles(files => files.filter((_, i) => i !== index))
+  }
+
+  const detectGridSize = (image: HTMLImageElement): { width: number, height: number } => {
+    const { width, height } = image
+    const aspectRatio = width / height
+    
+    // Simple grid size detection based on aspect ratio and common sizes
+    if (aspectRatio >= 0.9 && aspectRatio <= 1.1) return { width: 1, height: 1 } // Square
+    if (aspectRatio >= 1.9 && aspectRatio <= 2.1) return { width: 2, height: 1 } // 2:1
+    if (aspectRatio >= 0.49 && aspectRatio <= 0.51) return { width: 1, height: 2 } // 1:2
+    if (aspectRatio >= 2.9 && aspectRatio <= 3.1) return { width: 3, height: 1 } // 3:1
+    if (aspectRatio >= 0.32 && aspectRatio <= 0.35) return { width: 1, height: 3 } // 1:3
+    
+    return defaultGridSize // Fallback to default
+  }
+
+  // Helper function to compress image
+  const compressImage = (file: File, maxWidth = 512, quality = 0.8): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const canvas = document.createElement('canvas')
+      const ctx = canvas.getContext('2d')
+      const img = new Image()
+      
+      img.onload = () => {
+        // Calculate new dimensions maintaining aspect ratio
+        let { width, height } = img
+        if (width > maxWidth) {
+          height = (height * maxWidth) / width
+          width = maxWidth
+        }
+        if (height > maxWidth) {
+          width = (width * maxWidth) / height
+          height = maxWidth
+        }
+        
+        canvas.width = width
+        canvas.height = height
+        
+        if (!ctx) {
+          reject(new Error('Failed to get canvas context'))
+          return
+        }
+        
+        // Draw and compress image
+        ctx.drawImage(img, 0, 0, width, height)
+        const compressedDataUrl = canvas.toDataURL('image/jpeg', quality)
+        resolve(compressedDataUrl)
+      }
+      
+      img.onerror = () => reject(new Error('Failed to load image'))
+      
+      const reader = new FileReader()
+      reader.onload = (e) => {
+        img.src = e.target?.result as string
+      }
+      reader.onerror = () => reject(new Error('Failed to read file'))
+      reader.readAsDataURL(file)
+    })
+  }
+
+  const importAssets = async () => {
+    if (selectedFiles.length === 0) return
+    
+    setImporting(true)
+    setImportProgress({ current: 0, total: selectedFiles.length })
+    setImportResults({ success: 0, failed: 0, errors: [] })
+    
+    const results = { success: 0, failed: 0, errors: [] as string[] }
+    
+    for (let i = 0; i < selectedFiles.length; i++) {
+      const file = selectedFiles[i]
+      setImportProgress({ current: i + 1, total: selectedFiles.length })
+      
+      try {
+        // Compress the image to reduce storage size
+        const dataUrl = await compressImage(file)
+        
+        let gridSize = defaultGridSize
+        
+        if (autoDetectSize) {
+          // Load image to detect dimensions
+          const img = new Image()
+          await new Promise((resolve, reject) => {
+            img.onload = resolve
+            img.onerror = reject
+            img.src = dataUrl
+          })
+          gridSize = detectGridSize(img)
+        }
+        
+        const asset: Asset = {
+          id: `imported_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          name: file.name.replace(/\.[^/.]+$/, ''), // Remove extension
+          src: dataUrl,
+          thumb: dataUrl,
+          width: 32 * gridSize.width,
+          height: 32 * gridSize.height,
+          gridWidth: gridSize.width,
+          gridHeight: gridSize.height,
+          category: defaultCategory,
+          createdAt: new Date().toISOString()
+        } as any
+        
+        const success = await assetStore.addAsset(asset)
+        if (success) {
+          results.success++
+        } else {
+          results.failed++
+          results.errors.push(`Failed to save ${file.name}`)
+        }
+      } catch (error) {
+        results.failed++
+        results.errors.push(`Error processing ${file.name}: ${error instanceof Error ? error.message : 'Unknown error'}`)
+      }
+    }
+    
+    setImportResults(results)
+    setImporting(false)
+    setShowResults(true)
+  }
+
+  const resetDialog = () => {
+    setSelectedFiles([])
+    setImporting(false)
+    setImportProgress({ current: 0, total: 0 })
+    setImportResults({ success: 0, failed: 0, errors: [] })
+    setShowResults(false)
+  }
+
+  const handleClose = () => {
+    resetDialog()
+    onClose()
+  }
+
   return (
-    <div className="modal-overlay" onClick={onClose}>
+    <div className="modal-overlay" onClick={handleClose}>
       <div className="modal-content" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <h3>Import Assets</h3>
-          <button className="modal-close" onClick={onClose}>×</button>
+          <button className="modal-close" onClick={handleClose}>×</button>
         </div>
-        <div className="modal-body">
-          <p>Asset import functionality coming soon!</p>
-          <p>This will provide enhanced import capabilities including:</p>
-          <ul>
-            <li>Batch asset import</li>
-            <li>Automatic categorization</li>
-            <li>Duplicate detection</li>
-            <li>Bulk property editing</li>
-          </ul>
-        </div>
+        
+        {showResults ? (
+          <div className="modal-body">
+            <h4>Import Complete</h4>
+            <div className="import-summary">
+              <div className="summary-stat success">
+                <span className="stat-number">{importResults.success}</span>
+                <span className="stat-label">Successfully Imported</span>
+              </div>
+              {importResults.failed > 0 && (
+                <div className="summary-stat failed">
+                  <span className="stat-number">{importResults.failed}</span>
+                  <span className="stat-label">Failed</span>
+                </div>
+              )}
+            </div>
+            
+            {importResults.errors.length > 0 && (
+              <div className="error-details">
+                <h5>Errors:</h5>
+                <ul>
+                  {importResults.errors.map((error, index) => (
+                    <li key={index}>{error}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="modal-body">
+            {!importing ? (
+              <>
+                <div className="import-section">
+                  <h4>Select Files</h4>
+                  <input
+                    type="file"
+                    multiple
+                    accept="image/png,image/jpeg,image/jpg,image/webp,image/gif"
+                    onChange={handleFileSelect}
+                    style={{ marginBottom: '1rem' }}
+                  />
+                  <p style={{ fontSize: '0.9rem', color: '#aaa', margin: '0.5rem 0' }}>
+                    Supported formats: PNG, JPG, WebP, GIF (max 10MB each)
+                  </p>
+                </div>
+                
+                {selectedFiles.length > 0 && (
+                  <>
+                    <div className="import-section">
+                      <h4>Default Settings</h4>
+                      <div className="setting-group">
+                        <label>Category:</label>
+                        <select
+                          value={defaultCategory}
+                          onChange={(e) => setDefaultCategory(e.target.value)}
+                        >
+                          {DEFAULT_CATEGORIES.map(cat => (
+                            <option key={cat.id} value={cat.id}>{cat.name}</option>
+                          ))}
+                        </select>
+                      </div>
+                      
+                      <div className="setting-group">
+                        <label>
+                          <input
+                            type="checkbox"
+                            checked={autoDetectSize}
+                            onChange={(e) => setAutoDetectSize(e.target.checked)}
+                          />
+                          Auto-detect grid size
+                        </label>
+                      </div>
+                      
+                      {!autoDetectSize && (
+                        <div className="setting-group">
+                          <label>Default Grid Size:</label>
+                          <div className="grid-size-controls">
+                            <input
+                              type="number"
+                              min="1"
+                              max="10"
+                              value={defaultGridSize.width}
+                              onChange={(e) => setDefaultGridSize(prev => ({ ...prev, width: parseInt(e.target.value) || 1 }))}
+                            />
+                            <span>×</span>
+                            <input
+                              type="number"
+                              min="1"
+                              max="10"
+                              value={defaultGridSize.height}
+                              onChange={(e) => setDefaultGridSize(prev => ({ ...prev, height: parseInt(e.target.value) || 1 }))}
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                    
+                    <div className="import-section">
+                      <h4>Selected Files ({selectedFiles.length})</h4>
+                      <div className="file-list">
+                        {selectedFiles.map((file, index) => (
+                          <div key={index} className="file-item">
+                            <span className="file-name">{file.name}</span>
+                            <span className="file-size">{(file.size / 1024).toFixed(1)} KB</span>
+                            <button
+                              className="remove-file"
+                              onClick={() => removeFile(index)}
+                              title="Remove file"
+                            >
+                              ×
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </>
+                )}
+              </>
+            ) : (
+              <div className="import-progress">
+                <h4>Importing Assets...</h4>
+                <div className="progress-bar">
+                  <div 
+                    className="progress-fill"
+                    style={{ width: `${(importProgress.current / importProgress.total) * 100}%` }}
+                  ></div>
+                </div>
+                <p>{importProgress.current} of {importProgress.total} files processed</p>
+              </div>
+            )}
+          </div>
+        )}
+        
         <div className="modal-footer">
-          <button className="btn btn-secondary" onClick={onClose}>
-            Close
-          </button>
+          {showResults ? (
+            <button className="btn btn-primary" onClick={handleClose}>
+              Done
+            </button>
+          ) : importing ? (
+            <button className="btn btn-secondary" disabled>
+              Importing...
+            </button>
+          ) : (
+            <>
+              <button className="btn btn-secondary" onClick={handleClose}>
+                Cancel
+              </button>
+              {selectedFiles.length > 0 && (
+                <button className="btn btn-primary" onClick={importAssets}>
+                  Import {selectedFiles.length} Asset{selectedFiles.length !== 1 ? 's' : ''}
+                </button>
+              )}
+            </>
+          )}
         </div>
       </div>
     </div>

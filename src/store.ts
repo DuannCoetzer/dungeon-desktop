@@ -9,7 +9,7 @@ import type { Position } from './mapStore'
 
 // Re-export types for backward compatibility
 export type TileType = 'floor' | 'wall' | 'door'
-export type Palette = 'grass' | 'wall'
+export type Palette = 'grass' | 'wall' | 'delete'
 export type Layer = 'floor' | 'walls' | 'objects' | 'assets'
 export type TileMap = Record<string, TileType>
 

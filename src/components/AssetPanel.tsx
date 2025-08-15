@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useDrag } from 'react-dnd'
 import type { Asset } from '../store'
 import { useAssetStore, useAllAssets, useAssetLoading, useAssetError } from '../store/assetStore'
@@ -96,10 +96,10 @@ function AssetItem({ asset, onDelete }: { asset: Asset; onDelete?: (assetId: str
 }
 
 interface AssetPanelProps {
-  onAssetsUpdate?: (assets: Asset[]) => void
+  // No props needed since we use persistent store
 }
 
-export function AssetPanel({ onAssetsUpdate }: AssetPanelProps = {}) {
+export function AssetPanel({}: AssetPanelProps = {}) {
   // Use persistent asset store
   const assets = useAllAssets()
   const loading = useAssetLoading()
@@ -123,12 +123,6 @@ export function AssetPanel({ onAssetsUpdate }: AssetPanelProps = {}) {
     loadAssets()
   }, []) // Remove assetStore dependency to prevent infinite loop
   
-  // Notify parent when assets change
-  useEffect(() => {
-    if (onAssetsUpdate) {
-      onAssetsUpdate(assets)
-    }
-  }, [assets, onAssetsUpdate])
   
   const handleImportAsset = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
@@ -171,12 +165,15 @@ export function AssetPanel({ onAssetsUpdate }: AssetPanelProps = {}) {
       const dataUrl = e.target?.result as string
       if (!dataUrl) return
       
+      // Compress image to reduce localStorage usage
+      const compressedDataUrl = await compressImage(dataUrl, 512, 512, 0.8)
+      
       // Create a new asset with grid dimensions and custom name
       const newAsset: Asset = {
         id: `imported_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         name: assetName.trim() || pendingFile.name.replace(/\.[^/.]+$/, ''), // Use custom name or fallback to filename
-        src: dataUrl,
-        thumb: dataUrl, // Use same image for thumbnail
+        src: compressedDataUrl,
+        thumb: compressedDataUrl, // Use same image for thumbnail
         width: 32 * selectedGridSize.width, // Scale based on grid size
         height: 32 * selectedGridSize.height,
         gridWidth: selectedGridSize.width,
@@ -219,9 +216,9 @@ export function AssetPanel({ onAssetsUpdate }: AssetPanelProps = {}) {
     setAssetName('')
   }
   
-  const handleDeleteAsset = (assetId: string) => {
+  const handleDeleteAsset = useCallback((assetId: string) => {
     setShowDeleteConfirm(assetId)
-  }
+  }, [])
   
   const confirmDeleteAsset = async () => {
     if (!showDeleteConfirm) return
@@ -240,6 +237,40 @@ export function AssetPanel({ onAssetsUpdate }: AssetPanelProps = {}) {
   
   const cancelDeleteAsset = () => {
     setShowDeleteConfirm(null)
+  }
+  
+  // Helper function to compress images before storing
+  const compressImage = (dataUrl: string, maxWidth: number, maxHeight: number, quality: number): Promise<string> => {
+    return new Promise((resolve) => {
+      const img = new Image()
+      img.onload = () => {
+        const canvas = document.createElement('canvas')
+        const ctx = canvas.getContext('2d')!
+        
+        // Calculate new dimensions while maintaining aspect ratio
+        let { width, height } = img
+        if (width > height) {
+          if (width > maxWidth) {
+            height *= maxWidth / width
+            width = maxWidth
+          }
+        } else {
+          if (height > maxHeight) {
+            width *= maxHeight / height
+            height = maxHeight
+          }
+        }
+        
+        canvas.width = width
+        canvas.height = height
+        
+        // Draw and compress the image
+        ctx.drawImage(img, 0, 0, width, height)
+        const compressedDataUrl = canvas.toDataURL('image/jpeg', quality)
+        resolve(compressedDataUrl)
+      }
+      img.src = dataUrl
+    })
   }
 
   if (loading) {
