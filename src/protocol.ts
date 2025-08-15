@@ -6,9 +6,23 @@ import type { TileType, Layer, TileMap, AssetInstance } from './store'
 import type { GenerationParameters } from './uiStore'
 import { generateMapData, type GenerationParams } from './generation'
 
+export interface CharacterToken {
+  id: string
+  name: string
+  x: number
+  y: number
+  color: string
+  size: number // Multiplier for token size (0.5 = small, 1 = normal, 2 = large)
+  isVisible: boolean // For DM to hide/show tokens
+  notes?: string // Optional notes for DM
+  createdAt: string
+  updatedAt: string
+}
+
 export interface MapData {
   tiles: Record<Layer, TileMap>
   assetInstances: AssetInstance[]
+  characters: CharacterToken[]
   version: string
   id?: string
   createdAt?: string
@@ -64,6 +78,7 @@ export class MapProtocol {
         assets: {}
       },
       assetInstances: [],
+      characters: [],
       version: '1.0.0',
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
@@ -94,6 +109,18 @@ export class MapProtocol {
 
   getAssetInstance(id: string): AssetInstance | undefined {
     return this.mapData.assetInstances.find(instance => instance.id === id)
+  }
+
+  getCharacters(): CharacterToken[] {
+    return [...this.mapData.characters]
+  }
+
+  getCharacter(id: string): CharacterToken | undefined {
+    return this.mapData.characters.find(character => character.id === id)
+  }
+
+  getCharacterAt(x: number, y: number): CharacterToken | undefined {
+    return this.mapData.characters.find(character => character.x === x && character.y === y && character.isVisible)
   }
 
   // Tile operations
@@ -152,6 +179,36 @@ export class MapProtocol {
     )
     this.mapData.updatedAt = new Date().toISOString()
     this.notify()
+  }
+
+  // Character token operations
+  addCharacter(character: CharacterToken): void {
+    this.mapData.characters = [
+      ...this.mapData.characters,
+      { ...character }
+    ]
+    this.mapData.updatedAt = new Date().toISOString()
+    this.notify()
+  }
+
+  updateCharacter(id: string, updates: Partial<CharacterToken>): void {
+    this.mapData.characters = this.mapData.characters.map(character =>
+      character.id === id ? { ...character, ...updates, updatedAt: new Date().toISOString() } : character
+    )
+    this.mapData.updatedAt = new Date().toISOString()
+    this.notify()
+  }
+
+  deleteCharacter(id: string): void {
+    this.mapData.characters = this.mapData.characters.filter(
+      character => character.id !== id
+    )
+    this.mapData.updatedAt = new Date().toISOString()
+    this.notify()
+  }
+
+  moveCharacter(id: string, x: number, y: number): void {
+    this.updateCharacter(id, { x, y })
   }
 
   // Bulk operations
@@ -221,10 +278,16 @@ export class MapProtocol {
         data.assetInstances = []
       }
       
+      // Ensure characters exists
+      if (!Array.isArray(data.characters)) {
+        data.characters = []
+      }
+      
       // Set default values for missing metadata
       const mapData: MapData = {
         tiles: data.tiles,
         assetInstances: data.assetInstances,
+        characters: data.characters,
         version: data.version || '1.0.0',
         id: data.id,
         createdAt: data.createdAt || new Date().toISOString(),
@@ -284,6 +347,35 @@ export function updateAssetInstance(id: string, updates: Partial<AssetInstance>)
 
 export function deleteAssetInstance(id: string): void {
   mapProtocol.deleteAssetInstance(id)
+}
+
+// Character management functions
+export function addCharacter(character: CharacterToken): void {
+  mapProtocol.addCharacter(character)
+}
+
+export function updateCharacter(id: string, updates: Partial<CharacterToken>): void {
+  mapProtocol.updateCharacter(id, updates)
+}
+
+export function deleteCharacter(id: string): void {
+  mapProtocol.deleteCharacter(id)
+}
+
+export function moveCharacter(id: string, x: number, y: number): void {
+  mapProtocol.moveCharacter(id, x, y)
+}
+
+export function getCharacters(): CharacterToken[] {
+  return mapProtocol.getCharacters()
+}
+
+export function getCharacter(id: string): CharacterToken | undefined {
+  return mapProtocol.getCharacter(id)
+}
+
+export function getCharacterAt(x: number, y: number): CharacterToken | undefined {
+  return mapProtocol.getCharacterAt(x, y)
 }
 
 export function getMapData(): MapData {

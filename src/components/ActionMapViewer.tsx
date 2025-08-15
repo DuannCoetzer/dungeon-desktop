@@ -255,6 +255,54 @@ export function ActionMapViewer({ mapData }: ActionMapViewerProps) {
         }
       }
       
+      // Render character tokens
+      if (mapData.characters && mapData.characters.length > 0) {
+        for (const character of mapData.characters) {
+          if (!character.isVisible) continue // Skip hidden characters
+          
+          const tokenSize = character.size * TILE_SIZE
+          const tokenX = character.x * TILE_SIZE + (TILE_SIZE - tokenSize) / 2
+          const tokenY = character.y * TILE_SIZE + (TILE_SIZE - tokenSize) / 2
+          
+          // Draw character token circle
+          ctx.save()
+          
+          // Main token circle
+          ctx.fillStyle = character.color
+          ctx.beginPath()
+          ctx.arc(
+            tokenX + tokenSize / 2,
+            tokenY + tokenSize / 2,
+            tokenSize / 2,
+            0,
+            Math.PI * 2
+          )
+          ctx.fill()
+          
+          // Token border
+          ctx.strokeStyle = '#ffffff'
+          ctx.lineWidth = 2 / viewport.scale
+          ctx.stroke()
+          
+          // Character initial/name
+          if (character.name && tokenSize > 16) {
+            ctx.fillStyle = '#ffffff'
+            ctx.font = `bold ${Math.max(8, tokenSize / 3)}px sans-serif`
+            ctx.textAlign = 'center'
+            ctx.textBaseline = 'middle'
+            
+            const initial = character.name.charAt(0).toUpperCase()
+            ctx.fillText(
+              initial,
+              tokenX + tokenSize / 2,
+              tokenY + tokenSize / 2
+            )
+          }
+          
+          ctx.restore()
+        }
+      }
+      
       // Restore context
       ctx.restore()
     } finally {

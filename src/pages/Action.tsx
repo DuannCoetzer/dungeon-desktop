@@ -1,13 +1,14 @@
 import React, { useState, useRef, useEffect } from 'react'
-import { deserializeMap } from '../protocol'
+import { deserializeMap, setMapData, getMapData, subscribeToMapChanges, addCharacter, updateCharacter, deleteCharacter, moveCharacter, getCharacters } from '../protocol'
 import { ActionMapViewer } from '../components/ActionMapViewer'
-import type { MapData } from '../protocol'
+import { CharacterPanel } from '../components/CharacterPanel'
+import type { MapData, CharacterToken } from '../protocol'
 import { useAssetStore } from '../store/assetStore'
 
 interface ActionProps {}
 
 export function Action({}: ActionProps = {}) {
-  const [mapData, setMapData] = useState<any>(null)
+  const [mapData, setLocalMapData] = useState<MapData | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [mapInfo, setMapInfo] = useState<{
@@ -15,9 +16,21 @@ export function Action({}: ActionProps = {}) {
     createdAt?: string
     updatedAt?: string
   } | null>(null)
+  const [selectedCharacter, setSelectedCharacter] = useState<CharacterToken | null>(null)
+  const [characters, setCharacters] = useState<CharacterToken[]>([])
   
   const fileInputRef = useRef<HTMLInputElement>(null)
   const assetStore = useAssetStore()
+
+  // Subscribe to map data changes
+  useEffect(() => {
+    const unsubscribe = subscribeToMapChanges((newMapData) => {
+      setLocalMapData(newMapData)
+      setCharacters(newMapData.characters || [])
+    })
+    
+    return unsubscribe
+  }, [])
 
   // Load assets on component mount (needed for asset rendering)
   useEffect(() => {
@@ -27,6 +40,32 @@ export function Action({}: ActionProps = {}) {
     }
     loadAssets()
   }, [])
+
+  // Character management handlers
+  const handleAddCharacter = (character: Omit<CharacterToken, 'id' | 'createdAt' | 'updatedAt'>) => {
+    const newCharacter: CharacterToken = {
+      ...character,
+      id: crypto.randomUUID(),
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    }
+    addCharacter(newCharacter)
+  }
+
+  const handleUpdateCharacter = (id: string, updates: Partial<CharacterToken>) => {
+    updateCharacter(id, updates)
+  }
+
+  const handleDeleteCharacter = (id: string) => {
+    if (selectedCharacter?.id === id) {
+      setSelectedCharacter(null)
+    }
+    deleteCharacter(id)
+  }
+
+  const handleSelectCharacter = (character: CharacterToken | null) => {
+    setSelectedCharacter(character)
+  }
 
   const handleImportMap = () => {
     fileInputRef.current?.click()
