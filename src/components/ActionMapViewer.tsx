@@ -1,5 +1,6 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react'
 import type { MapData } from '../protocol'
+import { useAssetStore } from '../store/assetStore'
 
 interface ActionMapViewerProps {
   mapData: MapData
@@ -18,6 +19,7 @@ const MAX_ZOOM = 5.0
 export function ActionMapViewer({ mapData }: ActionMapViewerProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
+  const assetStore = useAssetStore()
   
   const [viewport, setViewport] = useState<ViewportState>({
     x: 0,
@@ -44,77 +46,222 @@ export function ActionMapViewer({ mapData }: ActionMapViewerProps) {
     }
   }
 
-  const renderMap = useCallback(() => {
+  // Create a ref to track if a render is in progress
+  const renderingRef = useRef(false)
+  const renderTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  // Persistent image cache to avoid reloading images on every render
+  const imageCacheRef = useRef(new Map<string, HTMLImageElement>())
+  
+  const renderMap = useCallback(async () => {
     const canvas = canvasRef.current
-    if (!canvas || !mapData) return
+    if (!canvas || !mapData || renderingRef.current) return
     
     const ctx = canvas.getContext('2d')
     if (!ctx) return
     
-    // Clear canvas
-    ctx.fillStyle = '#0d1117'
-    ctx.fillRect(0, 0, canvas.width, canvas.height)
+    // Prevent concurrent renders
+    renderingRef.current = true
     
-    // Save context for transformations
-    ctx.save()
-    
-    // Apply viewport transformations
-    ctx.translate(viewport.x, viewport.y)
-    ctx.scale(viewport.scale, viewport.scale)
-    
-    // Render floor tiles
-    if (mapData.tiles.floor) {
-      for (const [key, tileType] of Object.entries(mapData.tiles.floor)) {
-        const [x, y] = key.split(',').map(Number)
-        
-        ctx.fillStyle = getTileColor(tileType as string)
-        ctx.fillRect(
-          x * TILE_SIZE,
-          y * TILE_SIZE,
-          TILE_SIZE,
-          TILE_SIZE
-        )
-        
-        // Add subtle border
-        ctx.strokeStyle = '#374151'
-        ctx.lineWidth = 1 / viewport.scale
-        ctx.strokeRect(
-          x * TILE_SIZE,
-          y * TILE_SIZE,
-          TILE_SIZE,
-          TILE_SIZE
-        )
+    try {
+      // Clear canvas
+      ctx.fillStyle = '#0d1117'
+      ctx.fillRect(0, 0, canvas.width, canvas.height)
+      
+      // Save context for transformations
+      ctx.save()
+      
+      // Apply viewport transformations
+      ctx.translate(viewport.x, viewport.y)
+      ctx.scale(viewport.scale, viewport.scale)
+      
+      // Render in proper layer order: floor -> objects -> walls -> assets
+      
+      // Render floor tiles
+      if (mapData.tiles.floor) {
+        for (const [key, tileType] of Object.entries(mapData.tiles.floor)) {
+          const [x, y] = key.split(',').map(Number)
+          
+          ctx.fillStyle = getTileColor(tileType as string)
+          ctx.fillRect(
+            x * TILE_SIZE,
+            y * TILE_SIZE,
+            TILE_SIZE,
+            TILE_SIZE
+          )
+          
+          // Add subtle border
+          ctx.strokeStyle = '#374151'
+          ctx.lineWidth = 1 / viewport.scale
+          ctx.strokeRect(
+            x * TILE_SIZE,
+            y * TILE_SIZE,
+            TILE_SIZE,
+            TILE_SIZE
+          )
+        }
       }
-    }
-    
-    // Render wall tiles
-    if (mapData.tiles.walls) {
-      for (const [key, tileType] of Object.entries(mapData.tiles.walls)) {
-        const [x, y] = key.split(',').map(Number)
-        
-        ctx.fillStyle = getTileColor(tileType as string)
-        ctx.fillRect(
-          x * TILE_SIZE,
-          y * TILE_SIZE,
-          TILE_SIZE,
-          TILE_SIZE
-        )
-        
-        // Add wall border
-        ctx.strokeStyle = '#1f2937'
-        ctx.lineWidth = 2 / viewport.scale
-        ctx.strokeRect(
-          x * TILE_SIZE,
-          y * TILE_SIZE,
-          TILE_SIZE,
-          TILE_SIZE
-        )
+      
+      // Render object tiles
+      if (mapData.tiles.objects) {
+        for (const [key, tileType] of Object.entries(mapData.tiles.objects)) {
+          const [x, y] = key.split(',').map(Number)
+          
+          // Objects get a different color scheme
+          ctx.fillStyle = '#8a6f3d' // Bronze/brown color for objects
+          ctx.fillRect(
+            x * TILE_SIZE,
+            y * TILE_SIZE,
+            TILE_SIZE,
+            TILE_SIZE
+          )
+          
+          // Add object border
+          ctx.strokeStyle = '#d4a574'
+          ctx.lineWidth = 1.5 / viewport.scale
+          ctx.strokeRect(
+            x * TILE_SIZE,
+            y * TILE_SIZE,
+            TILE_SIZE,
+            TILE_SIZE
+          )
+        }
       }
+      
+      // Render wall tiles
+      if (mapData.tiles.walls) {
+        for (const [key, tileType] of Object.entries(mapData.tiles.walls)) {
+          const [x, y] = key.split(',').map(Number)
+          
+          ctx.fillStyle = getTileColor(tileType as string)
+          ctx.fillRect(
+            x * TILE_SIZE,
+            y * TILE_SIZE,
+            TILE_SIZE,
+            TILE_SIZE
+          )
+          
+          // Add wall border
+          ctx.strokeStyle = '#1f2937'
+          ctx.lineWidth = 2 / viewport.scale
+          ctx.strokeRect(
+            x * TILE_SIZE,
+            y * TILE_SIZE,
+            TILE_SIZE,
+            TILE_SIZE
+          )
+        }
+      }
+      
+      // Render assets using persistent cache
+      if (mapData.assetInstances && mapData.assetInstances.length > 0) {
+        const imageCache = imageCacheRef.current
+        
+        // Pre-load any missing images
+        const loadPromises: Promise<void>[] = []
+        
+        for (const instance of mapData.assetInstances) {
+          const asset = assetStore.getAssetById(instance.assetId)
+          if (!asset || imageCache.has(asset.src)) continue
+          
+          const loadPromise = new Promise<void>((resolve, reject) => {
+            const img = new Image()
+            img.onload = () => {
+              imageCache.set(asset.src, img)
+              resolve()
+            }
+            img.onerror = () => {
+              console.warn(`Failed to load asset image: ${asset.src}`)
+              reject(new Error(`Failed to load asset: ${asset.src}`))
+            }
+            img.src = asset.src
+          })
+          
+          loadPromises.push(loadPromise)
+        }
+        
+        // Wait for any new images to load
+        if (loadPromises.length > 0) {
+          await Promise.allSettled(loadPromises)
+        }
+        
+        // Now render all assets using cached images
+        for (const instance of mapData.assetInstances) {
+          try {
+            const asset = assetStore.getAssetById(instance.assetId)
+            
+            if (!asset) {
+              console.warn(`Asset not found in store: ${instance.assetId}`)
+              // Render a placeholder for missing assets
+              ctx.fillStyle = '#ff6b6b'
+              ctx.fillRect(
+                instance.x * TILE_SIZE,
+                instance.y * TILE_SIZE,
+                TILE_SIZE,
+                TILE_SIZE
+              )
+              ctx.strokeStyle = '#ff4444'
+              ctx.lineWidth = 1 / viewport.scale
+              ctx.strokeRect(
+                instance.x * TILE_SIZE,
+                instance.y * TILE_SIZE,
+                TILE_SIZE,
+                TILE_SIZE
+              )
+              continue
+            }
+            
+            const img = imageCache.get(asset.src)
+            if (!img) {
+              // Render error placeholder
+              ctx.fillStyle = '#ff9090'
+              ctx.fillRect(
+                instance.x * TILE_SIZE,
+                instance.y * TILE_SIZE,
+                TILE_SIZE,
+                TILE_SIZE
+              )
+              continue
+            }
+            
+            const width = (asset.gridWidth || 1) * TILE_SIZE
+            const height = (asset.gridHeight || 1) * TILE_SIZE
+            
+            // Save context for rotation
+            ctx.save()
+            ctx.translate(
+              instance.x * TILE_SIZE + width / 2,
+              instance.y * TILE_SIZE + height / 2
+            )
+            ctx.rotate((instance.rotation * Math.PI) / 180)
+            ctx.drawImage(
+              img,
+              -width / 2,
+              -height / 2,
+              width,
+              height
+            )
+            ctx.restore()
+          } catch (error) {
+            console.warn(`Failed to render asset ${instance.id}:`, error)
+            // Render error placeholder
+            ctx.fillStyle = '#ff9090'
+            ctx.fillRect(
+              instance.x * TILE_SIZE,
+              instance.y * TILE_SIZE,
+              TILE_SIZE,
+              TILE_SIZE
+            )
+          }
+        }
+      }
+      
+      // Restore context
+      ctx.restore()
+    } finally {
+      // Always reset the rendering flag
+      renderingRef.current = false
     }
-    
-    // Restore context
-    ctx.restore()
-  }, [mapData, viewport])
+  }, [mapData, viewport, assetStore])
 
   const handleMouseDown = (event: React.MouseEvent) => {
     setIsDragging(true)
@@ -140,7 +287,7 @@ export function ActionMapViewer({ mapData }: ActionMapViewerProps) {
     setIsDragging(false)
   }
 
-  const handleWheel = (event: React.WheelEvent) => {
+  const handleWheel = useCallback((event: WheelEvent) => {
     event.preventDefault()
     
     const rect = canvasRef.current?.getBoundingClientRect()
@@ -162,7 +309,7 @@ export function ActionMapViewer({ mapData }: ActionMapViewerProps) {
       y: newY,
       scale: newScale
     })
-  }
+  }, [viewport])
 
   const handleResetView = () => {
     if (!canvasRef.current || !mapData) return
@@ -238,9 +385,35 @@ export function ActionMapViewer({ mapData }: ActionMapViewerProps) {
     return () => clearTimeout(timer)
   }, [mapData])
 
+  // Set up native wheel event listener to avoid passive event listener issues
+  useEffect(() => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    
+    // Add wheel event listener with passive: false to allow preventDefault
+    canvas.addEventListener('wheel', handleWheel, { passive: false })
+    
+    return () => {
+      canvas.removeEventListener('wheel', handleWheel)
+    }
+  }, [handleWheel])
+
   // Re-render when viewport changes
   useEffect(() => {
+    // Clear any pending render
+    if (renderTimeoutRef.current) {
+      clearTimeout(renderTimeoutRef.current)
+    }
+    
+    // Always render immediately - the renderingRef prevents concurrent renders
     renderMap()
+    
+    // Cleanup timeout on unmount
+    return () => {
+      if (renderTimeoutRef.current) {
+        clearTimeout(renderTimeoutRef.current)
+      }
+    }
   }, [renderMap])
 
   return (
@@ -260,7 +433,6 @@ export function ActionMapViewer({ mapData }: ActionMapViewerProps) {
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
         onMouseLeave={handleMouseUp}
-        onWheel={handleWheel}
         style={{
           display: 'block',
           width: '100%',

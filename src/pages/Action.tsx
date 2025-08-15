@@ -1,7 +1,8 @@
-import React, { useState, useRef } from 'react'
+import React, { useState, useRef, useEffect } from 'react'
 import { deserializeMap } from '../protocol'
 import { ActionMapViewer } from '../components/ActionMapViewer'
 import type { MapData } from '../protocol'
+import { useAssetStore } from '../store/assetStore'
 
 interface ActionProps {}
 
@@ -16,6 +17,16 @@ export function Action({}: ActionProps = {}) {
   } | null>(null)
   
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const assetStore = useAssetStore()
+
+  // Load assets on component mount (needed for asset rendering)
+  useEffect(() => {
+    const loadAssets = async () => {
+      await assetStore.loadDefaultAssets()
+      await assetStore.loadImportedAssets()
+    }
+    loadAssets()
+  }, [])
 
   const handleImportMap = () => {
     fileInputRef.current?.click()
@@ -278,7 +289,7 @@ export function Action({}: ActionProps = {}) {
               </div>
               
               <div style={{ fontSize: '12px', color: '#7d8590' }}>
-                Tiles: {Object.keys(mapData.tiles?.floor || {}).length} floor, {Object.keys(mapData.tiles?.walls || {}).length} walls
+                Content: {Object.keys(mapData.tiles?.floor || {}).length} floor, {Object.keys(mapData.tiles?.walls || {}).length} walls{Object.keys(mapData.tiles?.objects || {}).length > 0 && `, ${Object.keys(mapData.tiles.objects).length} objects`}{mapData.assetInstances && mapData.assetInstances.length > 0 && `, ${mapData.assetInstances.length} assets`}
               </div>
             </div>
 
