@@ -41,7 +41,7 @@ export class DrawTool implements Tool {
 
   private drawTile(context: PointerEventContext): void {
     const state = useMapStore.getState()
-    const tileType = state.selected === 'wall' ? 'wall' : 'floor'
-    setTile(state.currentLayer, context.tileX, context.tileY, tileType)
+    // Use the selected palette type directly as the tile type
+    setTile(state.currentLayer, context.tileX, context.tileY, state.selected)
   }
 }

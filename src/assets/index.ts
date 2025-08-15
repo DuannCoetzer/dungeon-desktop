@@ -14,6 +14,17 @@ export { default as TileWater } from './tiles/water.svg'
 export { default as TileSand } from './tiles/sand.svg'
 export { default as TileDoor } from './tiles/door.svg'
 
+// Floor tile variants
+export { default as TileFloorStoneRough } from './tiles/floor-stone-rough.svg'
+export { default as TileFloorStoneSmooth } from './tiles/floor-stone-smooth.svg'
+export { default as TileFloorWoodPlanks } from './tiles/floor-wood-planks.svg'
+export { default as TileFloorCobblestone } from './tiles/floor-cobblestone.svg'
+
+// Wall tile variants
+export { default as TileWallBrick } from './tiles/wall-brick.svg'
+export { default as TileWallStone } from './tiles/wall-stone.svg'
+export { default as TileWallWood } from './tiles/wall-wood.svg'
+
 // Objects
 export { default as ObjTree } from './objects/tree.svg'
 export { default as ObjRock } from './objects/rock.svg'

@@ -10,7 +10,10 @@ import { AssetPanel } from '../components/AssetPanel'
 import { AssetInstanceComponent } from '../components/AssetInstance'
 import { GenerationParametersPanel } from '../components/GenerationParametersPanel'
 import { FileOperationsPanel } from '../components/FileOperationsPanel'
+import { ToolSettingsPanel } from '../components/ToolSettingsPanel'
 import { useAllAssets } from '../store/assetStore'
+import { preloadAllTileImages, renderTile } from '../utils/tileRenderer'
+import type { Palette } from '../store'
 
 const TILE = 32
 
@@ -115,6 +118,11 @@ export default function Game() {
   const toggleLayer = useMapStore(state => state.toggleLayer)
   const setLayerOpacity = useMapStore(state => state.setLayerOpacity)
 
+  // Preload tile images on component mount
+  useEffect(() => {
+    preloadAllTileImages()
+  }, [])
+
   useEffect(() => {
     const canvas = canvasRef.current
     const stage = stageRef.current
@@ -181,10 +189,10 @@ export default function Game() {
           const [tx, ty] = k.split(',').map(Number)
           const { sx, sy } = worldToScreen(tx, ty)
           const size = Math.ceil(TILE * scale)
-          const type = tiles[layer][k]
-          const color = layer === 'walls' ? '#3a3f4a' : layer === 'objects' ? '#8a6f3d' : '#243219'
-          ctx.fillStyle = type === 'wall' && layer === 'floor' ? '#3a3f4a' : color
-          ctx.fillRect(sx, sy, size, size)
+          const tileType = tiles[layer][k] as Palette
+          
+          // Use the new tile renderer with image support
+          renderTile(ctx, tileType, sx, sy, size)
         }
         ctx.globalAlpha = prevAlpha
       }
@@ -609,49 +617,7 @@ export default function Game() {
           </div>
         </div>
 
-        {/* Palette */}
-        <div className="toolbar-section">
-          <h3 className="toolbar-title">Palette</h3>
-          <div style={{ display: 'flex', gap: '8px' }}>
-            <button 
-              className={`palette-btn ${selected === 'grass' ? 'active' : ''}`}
-              onClick={() => setSelected('grass')}
-              style={{ 
-                padding: '8px', 
-                background: selected === 'grass' ? '#7c8cff' : '#141821',
-                border: '1px solid #1f2430',
-                borderRadius: '4px'
-              }}
-            >
-              <img src={TileGrass} alt="Grass" style={{ width: '24px', height: '24px' }} />
-            </button>
-            <button 
-              className={`palette-btn ${selected === 'wall' ? 'active' : ''}`}
-              onClick={() => setSelected('wall')}
-              style={{ 
-                padding: '8px', 
-                background: selected === 'wall' ? '#7c8cff' : '#141821',
-                border: '1px solid #1f2430',
-                borderRadius: '4px'
-              }}
-            >
-              <img src={TileWall} alt="Wall" style={{ width: '24px', height: '24px' }} />
-            </button>
-            <button 
-              className={`palette-btn ${selected === 'delete' ? 'active' : ''}`}
-              onClick={() => setSelected('delete')}
-              title="Delete Tiles"
-              style={{ 
-                padding: '8px', 
-                background: selected === 'delete' ? '#7c8cff' : '#141821',
-                border: '1px solid #1f2430',
-                borderRadius: '4px'
-              }}
-            >
-              <img src={IconErase} alt="Delete" style={{ width: '24px', height: '24px' }} />
-            </button>
-          </div>
-        </div>
+        <ToolSettingsPanel />
 
         {/* Layers */}
         <div className="toolbar-section">

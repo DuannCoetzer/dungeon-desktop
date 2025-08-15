@@ -8,8 +8,20 @@ import type { Tool } from './uiStore'
 import type { Position } from './mapStore'
 
 // Re-export types for backward compatibility
-export type TileType = 'floor' | 'wall' | 'door'
-export type Palette = 'grass' | 'wall' | 'delete'
+export type TileType = Palette
+export type Palette = 
+  | 'grass' 
+  | 'wall' 
+  | 'delete'
+  // Floor tiles
+  | 'floor-stone-rough'
+  | 'floor-stone-smooth' 
+  | 'floor-wood-planks'
+  | 'floor-cobblestone'
+  // Wall tiles
+  | 'wall-brick'
+  | 'wall-stone'
+  | 'wall-wood'
 export type Layer = 'floor' | 'walls' | 'objects' | 'assets'
 export type TileMap = Record<string, TileType>
 
