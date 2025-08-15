@@ -442,7 +442,7 @@ export default function Game() {
       window.removeEventListener('resize', resize)
       if (raf) cancelAnimationFrame(raf)
     }
-  }, [isGridVisible, isSnapToGrid])
+  }, [isGridVisible, isSnapToGrid, layerSettings])
 
   return (
     <div className="workspace">
