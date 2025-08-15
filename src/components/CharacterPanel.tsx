@@ -1,5 +1,6 @@
 import React, { useState } from 'react'
 import type { CharacterToken } from '../protocol'
+import { useAssetStore } from '../store/assetStore'
 
 interface CharacterPanelProps {
   characters: CharacterToken[]
@@ -15,6 +16,7 @@ interface NewCharacterForm {
   color: string
   size: number
   isVisible: boolean
+  avatarAssetId?: string
   notes: string
 }
 
@@ -38,8 +40,12 @@ export function CharacterPanel({
     color: DEFAULT_COLORS[0],
     size: 1,
     isVisible: true,
+    avatarAssetId: undefined,
     notes: ''
   })
+  const [showAvatarPicker, setShowAvatarPicker] = useState(false)
+  
+  const assetStore = useAssetStore()
 
   const handleAddCharacter = () => {
     if (newCharacter.name.trim()) {
@@ -50,6 +56,7 @@ export function CharacterPanel({
         color: newCharacter.color,
         size: newCharacter.size,
         isVisible: newCharacter.isVisible,
+        avatarAssetId: newCharacter.avatarAssetId,
         notes: newCharacter.notes.trim() || undefined
       })
       
@@ -58,9 +65,11 @@ export function CharacterPanel({
         color: DEFAULT_COLORS[0],
         size: 1,
         isVisible: true,
+        avatarAssetId: undefined,
         notes: ''
       })
       setIsAddingCharacter(false)
+      setShowAvatarPicker(false)
     }
   }
 
@@ -164,6 +173,118 @@ export function CharacterPanel({
                 />
               ))}
             </div>
+          </div>
+
+          {/* Avatar Selection */}
+          <div style={{ marginBottom: '8px' }}>
+            <label style={{ display: 'block', fontSize: '12px', marginBottom: '4px' }}>
+              Avatar (Optional)
+            </label>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              {newCharacter.avatarAssetId ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <img 
+                    src={assetStore.getAssetById(newCharacter.avatarAssetId)?.src} 
+                    alt="Avatar" 
+                    style={{ 
+                      width: '24px', 
+                      height: '24px', 
+                      borderRadius: '50%',
+                      border: '1px solid #30363d'
+                    }} 
+                  />
+                  <button
+                    onClick={() => setNewCharacter({ ...newCharacter, avatarAssetId: undefined })}
+                    style={{
+                      padding: '2px 6px',
+                      backgroundColor: '#dc2626',
+                      color: '#fff',
+                      border: 'none',
+                      borderRadius: '3px',
+                      fontSize: '10px',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    ✖
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setShowAvatarPicker(!showAvatarPicker)}
+                  style={{
+                    padding: '4px 8px',
+                    backgroundColor: '#238636',
+                    color: '#fff',
+                    border: 'none',
+                    borderRadius: '4px',
+                    fontSize: '11px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  🖼️ Select Avatar
+                </button>
+              )}
+            </div>
+            
+            {/* Avatar Picker */}
+            {showAvatarPicker && (
+              <div style={{
+                marginTop: '6px',
+                padding: '8px',
+                backgroundColor: '#21262d',
+                border: '1px solid #30363d',
+                borderRadius: '4px',
+                maxHeight: '120px',
+                overflowY: 'auto'
+              }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '4px' }}>
+                  {assetStore.allAssets.filter(asset => 
+                    asset.category === 'characters'
+                  ).map(asset => (
+                    <button
+                      key={asset.id}
+                      onClick={() => {
+                        setNewCharacter({ ...newCharacter, avatarAssetId: asset.id })
+                        setShowAvatarPicker(false)
+                      }}
+                      style={{
+                        padding: '2px',
+                        backgroundColor: 'transparent',
+                        border: '1px solid #30363d',
+                        borderRadius: '4px',
+                        cursor: 'pointer',
+                        aspectRatio: '1',
+                        overflow: 'hidden'
+                      }}
+                      title={asset.name}
+                    >
+                      <img 
+                        src={asset.src} 
+                        alt={asset.name} 
+                        style={{ 
+                          width: '100%', 
+                          height: '100%', 
+                          objectFit: 'cover',
+                          borderRadius: '2px'
+                        }} 
+                      />
+                    </button>
+                  ))}
+                </div>
+                {assetStore.allAssets.filter(asset => 
+                  asset.category === 'characters'
+                ).length === 0 && (
+                  <div style={{ 
+                    textAlign: 'center', 
+                    color: '#7d8590', 
+                    fontSize: '10px', 
+                    padding: '12px' 
+                  }}>
+                    No character avatars found. Upload images to the Asset Manager and categorize them as "Characters".
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           <div style={{ marginBottom: '8px' }}>

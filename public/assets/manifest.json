@@ -8,7 +8,8 @@
       "width": 32,
       "height": 32,
       "gridWidth": 1,
-      "gridHeight": 1
+      "gridHeight": 1,
+      "category": "objects"
     },
     {
       "id": "tree",
@@ -18,7 +19,8 @@
       "width": 48,
       "height": 64,
       "gridWidth": 1,
-      "gridHeight": 2
+      "gridHeight": 2,
+      "category": "objects"
     },
     {
       "id": "rock",
@@ -28,7 +30,8 @@
       "width": 24,
       "height": 24,
       "gridWidth": 1,
-      "gridHeight": 1
+      "gridHeight": 1,
+      "category": "objects"
     },
     {
       "id": "door",
@@ -38,7 +41,19 @@
       "width": 32,
       "height": 32,
       "gridWidth": 1,
-      "gridHeight": 1
+      "gridHeight": 1,
+      "category": "structures"
+    },
+    {
+      "id": "warrior",
+      "name": "Warrior",
+      "thumb": "/assets/thumbs/warrior.svg",
+      "src": "/assets/characters/warrior.svg",
+      "width": 32,
+      "height": 32,
+      "gridWidth": 1,
+      "gridHeight": 1,
+      "category": "characters"
     }
   ]
 }

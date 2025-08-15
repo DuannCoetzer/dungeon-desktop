@@ -14,6 +14,7 @@ export interface CharacterToken {
   color: string
   size: number // Multiplier for token size (0.5 = small, 1 = normal, 2 = large)
   isVisible: boolean // For DM to hide/show tokens
+  avatarAssetId?: string // Optional character avatar from Asset Manager
   notes?: string // Optional notes for DM
   createdAt: string
   updatedAt: string

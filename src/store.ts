@@ -35,6 +35,8 @@ export interface Asset {
   // Grid dimensions - how many grid cells this asset occupies
   gridWidth: number
   gridHeight: number
+  // Asset category for organization
+  category?: string
 }
 
 export interface AssetInstance {

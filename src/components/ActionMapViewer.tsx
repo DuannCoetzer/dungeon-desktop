@@ -4,6 +4,8 @@ import { useAssetStore } from '../store/assetStore'
 
 interface ActionMapViewerProps {
   mapData: MapData
+  onMoveCharacter?: (characterId: string, x: number, y: number) => void
+  selectedCharacterId?: string
 }
 
 interface ViewportState {
@@ -16,7 +18,7 @@ const TILE_SIZE = 32
 const MIN_ZOOM = 0.1
 const MAX_ZOOM = 5.0
 
-export function ActionMapViewer({ mapData }: ActionMapViewerProps) {
+export function ActionMapViewer({ mapData, onMoveCharacter, selectedCharacterId }: ActionMapViewerProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const assetStore = useAssetStore()
@@ -28,6 +30,8 @@ export function ActionMapViewer({ mapData }: ActionMapViewerProps) {
   })
   
   const [isDragging, setIsDragging] = useState(false)
+  const [isDraggingCharacter, setIsDraggingCharacter] = useState(false)
+  const [draggedCharacter, setDraggedCharacter] = useState<string | null>(null)
   const [lastMouse, setLastMouse] = useState({ x: 0, y: 0 })
 
   // Simple tile colors for rendering (since we don't have tile images in Action mode)
@@ -263,41 +267,103 @@ export function ActionMapViewer({ mapData }: ActionMapViewerProps) {
           const tokenSize = character.size * TILE_SIZE
           const tokenX = character.x * TILE_SIZE + (TILE_SIZE - tokenSize) / 2
           const tokenY = character.y * TILE_SIZE + (TILE_SIZE - tokenSize) / 2
+          const centerX = tokenX + tokenSize / 2
+          const centerY = tokenY + tokenSize / 2
+          const radius = tokenSize / 2
           
-          // Draw character token circle
           ctx.save()
           
-          // Main token circle
-          ctx.fillStyle = character.color
-          ctx.beginPath()
-          ctx.arc(
-            tokenX + tokenSize / 2,
-            tokenY + tokenSize / 2,
-            tokenSize / 2,
-            0,
-            Math.PI * 2
-          )
-          ctx.fill()
+          // Try to render character avatar if available
+          let avatarRendered = false
+          if (character.avatarAssetId) {
+            const avatar = assetStore.getAssetById(character.avatarAssetId)
+            if (avatar) {
+              const imageCache = imageCacheRef.current
+              const avatarImg = imageCache.get(avatar.src)
+              if (!avatarImg) {
+                // Try to load avatar image if not in cache
+                const img = new Image()
+                img.onload = () => {
+                  imageCache.set(avatar.src, img)
+                  // Trigger re-render after image loads
+                  setTimeout(() => renderMap(), 50)
+                }
+                img.onerror = () => console.warn(`Failed to load avatar: ${avatar.src}`)
+                img.src = avatar.src
+              } else {
+                // Draw avatar in a circular clipping path
+                ctx.beginPath()
+                ctx.arc(centerX, centerY, radius - 3, 0, Math.PI * 2)
+                ctx.clip()
+                
+                ctx.drawImage(
+                  avatarImg,
+                  tokenX + 3,
+                  tokenY + 3,
+                  tokenSize - 6,
+                  tokenSize - 6
+                )
+                avatarRendered = true
+              }
+            }
+          }
           
-          // Token border
-          ctx.strokeStyle = '#ffffff'
-          ctx.lineWidth = 2 / viewport.scale
+          // If no avatar or avatar failed to render, draw colored circle with initial
+          if (!avatarRendered) {
+            ctx.fillStyle = character.color
+            ctx.beginPath()
+            ctx.arc(centerX, centerY, radius - 3, 0, Math.PI * 2)
+            ctx.fill()
+            
+            // Character initials (2 letters)
+            if (character.name && tokenSize > 16) {
+              ctx.fillStyle = '#ffffff'
+              ctx.font = `bold ${Math.max(8, tokenSize / 4)}px sans-serif`
+              ctx.textAlign = 'center'
+              ctx.textBaseline = 'middle'
+              
+              // Get first 2 letters of name, or first letter + first letter of second word
+              const words = character.name.trim().split(/\s+/)
+              let initials = ''
+              
+              if (words.length >= 2) {
+                // Multiple words: first letter of first two words
+                initials = words[0].charAt(0).toUpperCase() + words[1].charAt(0).toUpperCase()
+              } else if (words[0].length >= 2) {
+                // Single word with 2+ letters: first two letters
+                initials = words[0].substring(0, 2).toUpperCase()
+              } else {
+                // Single letter: duplicate it
+                initials = words[0].charAt(0).toUpperCase().repeat(2)
+              }
+              
+              ctx.fillText(
+                initials,
+                centerX,
+                centerY
+              )
+            }
+          }
+          
+          ctx.restore()
+          
+          // Draw colored ring border around the token
+          ctx.save()
+          ctx.strokeStyle = character.color
+          ctx.lineWidth = 4 / viewport.scale
+          ctx.beginPath()
+          ctx.arc(centerX, centerY, radius, 0, Math.PI * 2)
           ctx.stroke()
           
-          // Character initial/name
-          if (character.name && tokenSize > 16) {
-            ctx.fillStyle = '#ffffff'
-            ctx.font = `bold ${Math.max(8, tokenSize / 3)}px sans-serif`
-            ctx.textAlign = 'center'
-            ctx.textBaseline = 'middle'
-            
-            const initial = character.name.charAt(0).toUpperCase()
-            ctx.fillText(
-              initial,
-              tokenX + tokenSize / 2,
-              tokenY + tokenSize / 2
-            )
-          }
+          // Add a subtle white outline to make the ring more visible
+          ctx.strokeStyle = '#ffffff'
+          ctx.lineWidth = 1 / viewport.scale
+          ctx.beginPath()
+          ctx.arc(centerX, centerY, radius + 2, 0, Math.PI * 2)
+          ctx.stroke()
+          ctx.beginPath()
+          ctx.arc(centerX, centerY, radius - 3, 0, Math.PI * 2)
+          ctx.stroke()
           
           ctx.restore()
         }
@@ -311,27 +377,110 @@ export function ActionMapViewer({ mapData }: ActionMapViewerProps) {
     }
   }, [mapData, viewport, assetStore])
 
+  // Helper function to convert screen coordinates to world coordinates
+  const screenToWorld = useCallback((screenX: number, screenY: number) => {
+    const canvas = canvasRef.current
+    if (!canvas) return { x: 0, y: 0 }
+    
+    const rect = canvas.getBoundingClientRect()
+    const x = (screenX - rect.left - viewport.x) / viewport.scale
+    const y = (screenY - rect.top - viewport.y) / viewport.scale
+    
+    return { x, y }
+  }, [viewport])
+
+  // Helper function to check if a point is inside a character token
+  const getCharacterAtPoint = useCallback((worldX: number, worldY: number) => {
+    if (!mapData.characters) return null
+    
+    for (const character of mapData.characters) {
+      if (!character.isVisible) continue
+      
+      const tokenSize = character.size * TILE_SIZE
+      const tokenX = character.x * TILE_SIZE + (TILE_SIZE - tokenSize) / 2
+      const tokenY = character.y * TILE_SIZE + (TILE_SIZE - tokenSize) / 2
+      const radius = tokenSize / 2
+      const centerX = tokenX + radius
+      const centerY = tokenY + radius
+      
+      // Check if point is within the circular token
+      const distance = Math.sqrt(
+        Math.pow(worldX - centerX, 2) + Math.pow(worldY - centerY, 2)
+      )
+      
+      if (distance <= radius) {
+        return character
+      }
+    }
+    
+    return null
+  }, [mapData.characters])
+
   const handleMouseDown = (event: React.MouseEvent) => {
-    setIsDragging(true)
-    setLastMouse({ x: event.clientX, y: event.clientY })
+    event.preventDefault()
+    
+    // Middle mouse button (button 1) for map panning
+    if (event.button === 1) {
+      setIsDragging(true)
+      setLastMouse({ x: event.clientX, y: event.clientY })
+      return
+    }
+    
+    // Left mouse button (button 0) for character interaction
+    if (event.button === 0) {
+      const worldPos = screenToWorld(event.clientX, event.clientY)
+      const characterAtPoint = getCharacterAtPoint(worldPos.x, worldPos.y)
+      
+      if (characterAtPoint) {
+        if (selectedCharacterId === characterAtPoint.id) {
+          // Character is already selected - start dragging
+          setIsDraggingCharacter(true)
+          setDraggedCharacter(characterAtPoint.id)
+          setLastMouse({ x: event.clientX, y: event.clientY })
+        } else {
+          // Character is not selected - select it first (via onSelectCharacter callback if available)
+          // For now, we'll allow immediate dragging of any character
+          setIsDraggingCharacter(true)
+          setDraggedCharacter(characterAtPoint.id)
+          setLastMouse({ x: event.clientX, y: event.clientY })
+        }
+      }
+      // If no character at point, do nothing
+    }
   }
 
   const handleMouseMove = (event: React.MouseEvent) => {
-    if (!isDragging) return
-    
-    const deltaX = event.clientX - lastMouse.x
-    const deltaY = event.clientY - lastMouse.y
-    
-    setViewport(prev => ({
-      ...prev,
-      x: prev.x + deltaX,
-      y: prev.y + deltaY
-    }))
-    
-    setLastMouse({ x: event.clientX, y: event.clientY })
+    if (isDraggingCharacter && draggedCharacter && onMoveCharacter) {
+      // Handle character dragging
+      const worldPos = screenToWorld(event.clientX, event.clientY)
+      const tileX = Math.round(worldPos.x / TILE_SIZE)
+      const tileY = Math.round(worldPos.y / TILE_SIZE)
+      
+      // Update character position in real-time during drag (optimistic update)
+      onMoveCharacter(draggedCharacter, tileX, tileY)
+      setLastMouse({ x: event.clientX, y: event.clientY })
+    } else if (isDragging) {
+      // Handle map panning (middle mouse button)
+      const deltaX = event.clientX - lastMouse.x
+      const deltaY = event.clientY - lastMouse.y
+      
+      setViewport(prev => ({
+        ...prev,
+        x: prev.x + deltaX,
+        y: prev.y + deltaY
+      }))
+      
+      setLastMouse({ x: event.clientX, y: event.clientY })
+    }
   }
 
-  const handleMouseUp = () => {
+  const handleMouseUp = (event: React.MouseEvent) => {
+    if (isDraggingCharacter && draggedCharacter) {
+      // Finish character drag - position already updated in handleMouseMove
+      setIsDraggingCharacter(false)
+      setDraggedCharacter(null)
+    }
+    
     setIsDragging(false)
   }
 
@@ -472,7 +621,7 @@ export function ActionMapViewer({ mapData }: ActionMapViewerProps) {
         height: '100%', 
         position: 'relative',
         overflow: 'hidden',
-        cursor: isDragging ? 'grabbing' : 'grab'
+        cursor: isDraggingCharacter ? 'grabbing' : (isDragging ? 'grabbing' : 'default')
       }}
     >
       <canvas

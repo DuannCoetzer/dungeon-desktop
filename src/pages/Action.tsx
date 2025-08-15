@@ -56,6 +56,10 @@ export function Action({}: ActionProps = {}) {
     updateCharacter(id, updates)
   }
 
+  const handleMoveCharacter = (characterId: string, x: number, y: number) => {
+    updateCharacter(characterId, { x, y })
+  }
+
   const handleDeleteCharacter = (id: string) => {
     if (selectedCharacter?.id === id) {
       setSelectedCharacter(null)
@@ -103,7 +107,7 @@ export function Action({}: ActionProps = {}) {
         return
       }
 
-      setMapData(data)
+      // Map is already loaded into protocol via deserializeMap
       setMapInfo({
         name: file.name.replace('.json', ''),
         createdAt: data.createdAt,
@@ -121,7 +125,7 @@ export function Action({}: ActionProps = {}) {
   }
 
   const handleCloseMap = () => {
-    setMapData(null)
+    setMapData(null) // Use protocol function to clear map data
     setMapInfo(null)
     setError(null)
   }
@@ -302,45 +306,70 @@ export function Action({}: ActionProps = {}) {
             </div>
           </div>
         ) : (
-          /* Map viewer */
-          <div style={{ flex: 1, position: 'relative' }}>
+          /* Map viewer with character panel */
+          <div style={{ flex: 1, display: 'flex' }}>
+            {/* Character Panel */}
             <div style={{
-              position: 'absolute',
-              top: '16px',
-              left: '16px',
-              right: '16px',
-              backgroundColor: '#161b22',
-              border: '1px solid #30363d',
-              borderRadius: '6px',
-              padding: '12px',
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              zIndex: 10
+              width: '320px',
+              backgroundColor: '#0d1117',
+              borderRight: '1px solid #30363d',
+              padding: '16px',
+              overflowY: 'auto'
             }}>
-              <div>
-                <h3 style={{ margin: 0, fontSize: '16px', fontWeight: '600' }}>
-                  🗺️ {mapInfo?.name}
-                </h3>
-                <p style={{ margin: '4px 0 0 0', fontSize: '12px', color: '#7d8590' }}>
-                  Read-only mode - Drag to pan, scroll to zoom
-                </p>
-              </div>
-              
-              <div style={{ fontSize: '12px', color: '#7d8590' }}>
-                Content: {Object.keys(mapData.tiles?.floor || {}).length} floor, {Object.keys(mapData.tiles?.walls || {}).length} walls{Object.keys(mapData.tiles?.objects || {}).length > 0 && `, ${Object.keys(mapData.tiles.objects).length} objects`}{mapData.assetInstances && mapData.assetInstances.length > 0 && `, ${mapData.assetInstances.length} assets`}
-              </div>
+              <CharacterPanel
+                characters={characters}
+                onAddCharacter={handleAddCharacter}
+                onUpdateCharacter={handleUpdateCharacter}
+                onDeleteCharacter={handleDeleteCharacter}
+                onSelectCharacter={handleSelectCharacter}
+                selectedCharacter={selectedCharacter}
+              />
             </div>
 
-            {/* Map viewer */}
-            <div style={{
-              position: 'absolute',
-              top: '80px', // Leave space for info bar
-              left: '0',
-              right: '0',
-              bottom: '0'
-            }}>
-              <ActionMapViewer mapData={mapData} />
+            {/* Map viewer area */}
+            <div style={{ flex: 1, position: 'relative' }}>
+              <div style={{
+                position: 'absolute',
+                top: '16px',
+                left: '16px',
+                right: '16px',
+                backgroundColor: '#161b22',
+                border: '1px solid #30363d',
+                borderRadius: '6px',
+                padding: '12px',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                zIndex: 10
+              }}>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '16px', fontWeight: '600' }}>
+                    🗺️ {mapInfo?.name}
+                  </h3>
+                  <p style={{ margin: '4px 0 0 0', fontSize: '12px', color: '#7d8590' }}>
+                    DM Mode - Drag to pan, scroll to zoom, click to place characters
+                  </p>
+                </div>
+                
+                <div style={{ fontSize: '12px', color: '#7d8590' }}>
+                  Content: {Object.keys(mapData.tiles?.floor || {}).length} floor, {Object.keys(mapData.tiles?.walls || {}).length} walls{Object.keys(mapData.tiles?.objects || {}).length > 0 && `, ${Object.keys(mapData.tiles.objects).length} objects`}{mapData.assetInstances && mapData.assetInstances.length > 0 && `, ${mapData.assetInstances.length} assets`}{characters.length > 0 && `, ${characters.length} characters`}
+                </div>
+              </div>
+
+              {/* Map viewer */}
+              <div style={{
+                position: 'absolute',
+                top: '80px', // Leave space for info bar
+                left: '0',
+                right: '0',
+                bottom: '0'
+              }}>
+              <ActionMapViewer 
+                mapData={mapData} 
+                onMoveCharacter={handleMoveCharacter}
+                selectedCharacterId={selectedCharacter?.id}
+              />
+              </div>
             </div>
           </div>
         )}

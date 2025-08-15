@@ -666,8 +666,10 @@ export function AssetPanel({}: AssetPanelProps = {}) {
           overflowY: 'auto',
         }}
       >
-        {assets.map((asset) => (
-          <AssetItem key={asset.id} asset={asset} onDelete={handleDeleteAsset} />
+        {assets
+          .filter(asset => asset.category !== 'characters') // Exclude characters category from Game page
+          .map((asset) => (
+            <AssetItem key={asset.id} asset={asset} onDelete={handleDeleteAsset} />
         ))}
       </div>
     </div>
