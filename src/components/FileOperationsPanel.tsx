@@ -2,6 +2,7 @@ import { useState, useRef } from 'react'
 import { useMapStore, useAssetInstances } from '../mapStore'
 import { useUIStore } from '../uiStore'
 import { getSavedMaps } from '../services/tauri'
+import { useAssetStore } from '../store/assetStore'
 
 export function FileOperationsPanel() {
   const [isLoading, setIsLoading] = useState(false)
@@ -12,6 +13,7 @@ export function FileOperationsPanel() {
   const loadMapFromFile = useMapStore(state => state.loadMapFromFile)
   const assetInstances = useAssetInstances()
   const mapData = useMapStore(state => state.mapData)
+  const assetStore = useAssetStore()
   
   // Check if we're in development mode
   const isDevelopmentMode = typeof window !== 'undefined' && (window as any).__TAURI__ === undefined
@@ -78,34 +80,51 @@ export function FileOperationsPanel() {
       const TILE_SIZE = 32
       const EXPORT_SCALE = 2 // Higher resolution for export
       
-      // Calculate map bounds
+      // Calculate map bounds more accurately
       const tiles = mapData.tiles
-      let minX = 0, minY = 0, maxX = 0, maxY = 0
+      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
+      let hasContent = false
       
       // Find bounds from tiles
       Object.keys(tiles.floor).concat(Object.keys(tiles.walls), Object.keys(tiles.objects)).forEach(key => {
         const [x, y] = key.split(',').map(Number)
         minX = Math.min(minX, x)
         minY = Math.min(minY, y)
-        maxX = Math.max(maxX, x)
-        maxY = Math.max(maxY, y)
+        maxX = Math.max(maxX, x + 1) // Add 1 to include the full tile
+        maxY = Math.max(maxY, y + 1)
+        hasContent = true
       })
       
-      // Include assets in bounds calculation
-      assetInstances.forEach(asset => {
-        const assetMinX = Math.floor(asset.x)
-        const assetMinY = Math.floor(asset.y)
-        const assetMaxX = Math.ceil(asset.x + asset.width / TILE_SIZE)
-        const assetMaxY = Math.ceil(asset.y + asset.height / TILE_SIZE)
+      // Include assets in bounds calculation with proper grid size handling
+      assetInstances.forEach(instance => {
+        // Get the asset data to determine its grid size
+        const asset = assetStore.getAssetById(instance.assetId)
+        const gridWidth = asset?.gridWidth || 1
+        const gridHeight = asset?.gridHeight || 1
+        
+        // Calculate asset bounds in grid coordinates
+        const assetMinX = Math.floor(instance.x)
+        const assetMinY = Math.floor(instance.y)
+        const assetMaxX = assetMinX + gridWidth
+        const assetMaxY = assetMinY + gridHeight
         
         minX = Math.min(minX, assetMinX)
         minY = Math.min(minY, assetMinY)
         maxX = Math.max(maxX, assetMaxX)
         maxY = Math.max(maxY, assetMaxY)
+        hasContent = true
       })
       
-      // Add some padding
-      const padding = 2
+      // If no content, create a minimal map
+      if (!hasContent) {
+        minX = 0
+        minY = 0
+        maxX = 10
+        maxY = 10
+      }
+      
+      // Add minimal padding to ensure clean edges
+      const padding = 1
       minX -= padding
       minY -= padding
       maxX += padding
@@ -146,33 +165,34 @@ export function FileOperationsPanel() {
         }
       }
       
-      // Load and draw assets
+      // Load and draw assets using asset store
       const assetPromises = assetInstances.map(async (instance) => {
         try {
-          // Find the asset data
-          const response = await fetch('/assets/manifest.json')
-          const manifestData = await response.json()
-          const asset = manifestData.assets.find((a: any) => a.id === instance.assetId)
+          // Find the asset data from asset store (includes both default and imported assets)
+          const asset = assetStore.getAssetById(instance.assetId)
           
-          if (asset) {
-            const img = new Image()
-            await new Promise<void>((resolve, reject) => {
-              img.onload = () => resolve()
-              img.onerror = () => reject(new Error(`Failed to load asset: ${asset.src}`))
-              img.src = asset.src
-            })
-            
-            const { sx, sy } = worldToExport(instance.x, instance.y)
-            const width = instance.width * EXPORT_SCALE
-            const height = instance.height * EXPORT_SCALE
-            
-            // Save context for rotation
-            exportCtx.save()
-            exportCtx.translate(sx + width / 2, sy + height / 2)
-            exportCtx.rotate((instance.rotation * Math.PI) / 180)
-            exportCtx.drawImage(img, -width / 2, -height / 2, width, height)
-            exportCtx.restore()
+          if (!asset) {
+            console.warn(`Asset not found in store: ${instance.assetId}`)
+            return
           }
+          
+          const img = new Image()
+          await new Promise<void>((resolve, reject) => {
+            img.onload = () => resolve()
+            img.onerror = () => reject(new Error(`Failed to load asset: ${asset.src}`))
+            img.src = asset.src
+          })
+          
+          const { sx, sy } = worldToExport(instance.x, instance.y)
+          const width = (asset.gridWidth || 1) * TILE_SIZE * EXPORT_SCALE
+          const height = (asset.gridHeight || 1) * TILE_SIZE * EXPORT_SCALE
+          
+          // Save context for rotation
+          exportCtx.save()
+          exportCtx.translate(sx + width / 2, sy + height / 2)
+          exportCtx.rotate((instance.rotation * Math.PI) / 180)
+          exportCtx.drawImage(img, -width / 2, -height / 2, width, height)
+          exportCtx.restore()
         } catch (error) {
           console.warn(`Failed to render asset ${instance.id}:`, error)
         }
