@@ -1,5 +1,6 @@
-import { useState } from 'react'
-import { useMapStore } from '../mapStore'
+import { useState, useRef } from 'react'
+import { useMapStore, useAssetInstances } from '../mapStore'
+import { useUIStore } from '../uiStore'
 
 export function FileOperationsPanel() {
   const [isLoading, setIsLoading] = useState(false)
@@ -7,6 +8,8 @@ export function FileOperationsPanel() {
   
   const saveMapToFile = useMapStore(state => state.saveMapToFile)
   const loadMapFromFile = useMapStore(state => state.loadMapFromFile)
+  const assetInstances = useAssetInstances()
+  const mapData = useMapStore(state => state.mapData)
   
   const handleSave = async () => {
     if (isLoading) return
@@ -54,6 +57,151 @@ export function FileOperationsPanel() {
     }
   }
   
+  const handleExportPNG = async () => {
+    if (isLoading) return
+    
+    setIsLoading(true)
+    setLastOperationStatus(null)
+    
+    try {
+      // Create a temporary canvas for export
+      const exportCanvas = document.createElement('canvas')
+      const exportCtx = exportCanvas.getContext('2d')!
+      
+      // Set canvas size (you might want to make this configurable)
+      const TILE_SIZE = 32
+      const EXPORT_SCALE = 2 // Higher resolution for export
+      
+      // Calculate map bounds
+      const tiles = mapData.tiles
+      let minX = 0, minY = 0, maxX = 0, maxY = 0
+      
+      // Find bounds from tiles
+      Object.keys(tiles.floor).concat(Object.keys(tiles.walls), Object.keys(tiles.objects)).forEach(key => {
+        const [x, y] = key.split(',').map(Number)
+        minX = Math.min(minX, x)
+        minY = Math.min(minY, y)
+        maxX = Math.max(maxX, x)
+        maxY = Math.max(maxY, y)
+      })
+      
+      // Include assets in bounds calculation
+      assetInstances.forEach(asset => {
+        const assetMinX = Math.floor(asset.x)
+        const assetMinY = Math.floor(asset.y)
+        const assetMaxX = Math.ceil(asset.x + asset.width / TILE_SIZE)
+        const assetMaxY = Math.ceil(asset.y + asset.height / TILE_SIZE)
+        
+        minX = Math.min(minX, assetMinX)
+        minY = Math.min(minY, assetMinY)
+        maxX = Math.max(maxX, assetMaxX)
+        maxY = Math.max(maxY, assetMaxY)
+      })
+      
+      // Add some padding
+      const padding = 2
+      minX -= padding
+      minY -= padding
+      maxX += padding
+      maxY += padding
+      
+      const mapWidth = (maxX - minX) * TILE_SIZE * EXPORT_SCALE
+      const mapHeight = (maxY - minY) * TILE_SIZE * EXPORT_SCALE
+      
+      exportCanvas.width = mapWidth
+      exportCanvas.height = mapHeight
+      
+      // Set black background
+      exportCtx.fillStyle = '#000'
+      exportCtx.fillRect(0, 0, mapWidth, mapHeight)
+      
+      // Helper function to convert world coordinates to export canvas coordinates
+      const worldToExport = (x: number, y: number) => ({
+        sx: (x - minX) * TILE_SIZE * EXPORT_SCALE,
+        sy: (y - minY) * TILE_SIZE * EXPORT_SCALE
+      })
+      
+      // Draw tiles
+      const layerOrder: Array<keyof typeof tiles> = ['floor', 'walls', 'objects']
+      for (const layer of layerOrder) {
+        for (const k of Object.keys(tiles[layer])) {
+          const [tx, ty] = k.split(',').map(Number)
+          const { sx, sy } = worldToExport(tx, ty)
+          const size = TILE_SIZE * EXPORT_SCALE
+          const type = tiles[layer][k]
+          
+          let color = '#243219' // default floor color
+          if (layer === 'walls') color = '#3a3f4a'
+          else if (layer === 'objects') color = '#8a6f3d'
+          if (type === 'wall' && layer === 'floor') color = '#3a3f4a'
+          
+          exportCtx.fillStyle = color
+          exportCtx.fillRect(sx, sy, size, size)
+        }
+      }
+      
+      // Load and draw assets
+      const assetPromises = assetInstances.map(async (instance) => {
+        try {
+          // Find the asset data
+          const response = await fetch('/assets/manifest.json')
+          const manifestData = await response.json()
+          const asset = manifestData.assets.find((a: any) => a.id === instance.assetId)
+          
+          if (asset) {
+            const img = new Image()
+            await new Promise<void>((resolve, reject) => {
+              img.onload = () => resolve()
+              img.onerror = () => reject(new Error(`Failed to load asset: ${asset.src}`))
+              img.src = asset.src
+            })
+            
+            const { sx, sy } = worldToExport(instance.x, instance.y)
+            const width = instance.width * EXPORT_SCALE
+            const height = instance.height * EXPORT_SCALE
+            
+            // Save context for rotation
+            exportCtx.save()
+            exportCtx.translate(sx + width / 2, sy + height / 2)
+            exportCtx.rotate((instance.rotation * Math.PI) / 180)
+            exportCtx.drawImage(img, -width / 2, -height / 2, width, height)
+            exportCtx.restore()
+          }
+        } catch (error) {
+          console.warn(`Failed to render asset ${instance.id}:`, error)
+        }
+      })
+      
+      await Promise.all(assetPromises)
+      
+      // Convert to blob and download
+      exportCanvas.toBlob((blob) => {
+        if (blob) {
+          const url = URL.createObjectURL(blob)
+          const link = document.createElement('a')
+          link.href = url
+          link.download = `dungeon-map-${new Date().toISOString().split('T')[0]}.png`
+          document.body.appendChild(link)
+          link.click()
+          document.body.removeChild(link)
+          URL.revokeObjectURL(url)
+          
+          setLastOperationStatus('Map exported as PNG!')
+        } else {
+          setLastOperationStatus('Export failed.')
+        }
+      }, 'image/png')
+      
+    } catch (error) {
+      console.error('PNG export failed:', error)
+      setLastOperationStatus('Export failed.')
+    } finally {
+      setIsLoading(false)
+      // Clear status after 3 seconds
+      setTimeout(() => setLastOperationStatus(null), 3000)
+    }
+  }
+  
   return (
     <div className="toolbar-section">
       <h3 className="toolbar-title">File</h3>
@@ -74,18 +222,26 @@ export function FileOperationsPanel() {
         >
           📁 Load Map {isLoading ? '...' : ''}
         </button>
+        <button 
+          className="tool-button" 
+          onClick={handleExportPNG}
+          disabled={isLoading}
+          title="Export current map as high-resolution PNG image"
+        >
+          🖼️ Export PNG {isLoading ? '...' : ''}
+        </button>
         {lastOperationStatus && (
           <div style={{
             padding: '4px 8px',
             fontSize: '12px',
             borderRadius: '4px',
-            backgroundColor: lastOperationStatus.includes('success') ? '#2d4a2d' : 
+            backgroundColor: (lastOperationStatus.includes('success') || lastOperationStatus.includes('exported')) ? '#2d4a2d' : 
                             lastOperationStatus.includes('cancelled') ? '#4a4a2d' : '#4a2d2d',
-            color: lastOperationStatus.includes('success') ? '#90ee90' : 
+            color: (lastOperationStatus.includes('success') || lastOperationStatus.includes('exported')) ? '#90ee90' : 
                    lastOperationStatus.includes('cancelled') ? '#ffff90' : '#ff9090',
             textAlign: 'center',
             border: '1px solid',
-            borderColor: lastOperationStatus.includes('success') ? '#90ee90' : 
+            borderColor: (lastOperationStatus.includes('success') || lastOperationStatus.includes('exported')) ? '#90ee90' : 
                         lastOperationStatus.includes('cancelled') ? '#ffff90' : '#ff9090'
           }}>
             {lastOperationStatus}

@@ -22,6 +22,10 @@ export default function Game() {
   // UI state from UI store
   const tool = useSelectedTool()
   const setTool = useUIStore(state => state.setSelectedTool)
+  const isGridVisible = useUIStore(state => state.isGridVisible)
+  const isSnapToGrid = useUIStore(state => state.isSnapToGrid)
+  const toggleGrid = useUIStore(state => state.toggleGrid)
+  const toggleSnapToGrid = useUIStore(state => state.toggleSnapToGrid)
   
   // Map state from map store
   const selected = useSelectedPalette()
@@ -40,7 +44,13 @@ export default function Game() {
         const response = await fetch('/assets/manifest.json')
         if (response.ok) {
           const data = await response.json()
-          setAssets(data.assets || [])
+          // Ensure backward compatibility by adding default grid dimensions
+          const assetsWithGridDimensions = (data.assets || []).map((asset: any) => ({
+            ...asset,
+            gridWidth: asset.gridWidth || 1,
+            gridHeight: asset.gridHeight || 1
+          }))
+          setAssets(assetsWithGridDimensions)
         }
       } catch (error) {
         console.error('Failed to load assets:', error)
@@ -68,15 +78,30 @@ export default function Game() {
       const worldX = (x - offsetX) / (TILE * scale)
       const worldY = (y - offsetY) / (TILE * scale)
       
-      // Create new asset instance
+      // Snap to grid if enabled (check UI store snap setting)
+      const { isSnapToGrid } = useUIStore.getState()
+      const snappedX = isSnapToGrid ? Math.round(worldX) : worldX
+      const snappedY = isSnapToGrid ? Math.round(worldY) : worldY
+      
+      // Use grid dimensions from asset, with fallback to 1x1 for backward compatibility
+      const gridWidth = item.asset.gridWidth || 1
+      const gridHeight = item.asset.gridHeight || 1
+      
+      // Calculate the actual size based on grid dimensions
+      const actualWidth = TILE * gridWidth
+      const actualHeight = TILE * gridHeight
+      
+      // Create new asset instance with proper grid dimensions
       const newAssetInstance: AssetInstance = {
         id: `asset_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         assetId: item.asset.id,
-        x: worldX,
-        y: worldY,
-        width: item.asset.width,
-        height: item.asset.height,
+        x: snappedX,
+        y: snappedY,
+        width: actualWidth,
+        height: actualHeight,
         rotation: 0,
+        gridWidth,
+        gridHeight,
       }
       
       addAssetInstance(newAssetInstance)
@@ -140,20 +165,25 @@ export default function Game() {
       ctx.clearRect(0, 0, canvas.width, canvas.height)
       ctx.fillStyle = '#000'
       ctx.fillRect(0, 0, canvas.width, canvas.height)
-      ctx.strokeStyle = '#2a2a2a'
-      ctx.lineWidth = 1
-      // visible tile bounds
-      const left = screenToTile(0, 0).x - 1
-      const top = screenToTile(0, 0).y - 1
-      const right = screenToTile(canvas.width, canvas.height).x + 2
-      const bottom = screenToTile(canvas.width, canvas.height).y + 2
-      for (let x = left; x <= right; x++) {
-        const { sx } = worldToScreen(x, 0)
-        ctx.beginPath(); ctx.moveTo(sx + 0.5, 0); ctx.lineTo(sx + 0.5, canvas.height); ctx.stroke()
-      }
-      for (let y = top; y <= bottom; y++) {
-        const { sy } = worldToScreen(0, y)
-        ctx.beginPath(); ctx.moveTo(0, sy + 0.5); ctx.lineTo(canvas.width, sy + 0.5); ctx.stroke()
+      
+      // Only draw grid lines if grid is visible
+      const { isGridVisible } = useUIStore.getState()
+      if (isGridVisible) {
+        ctx.strokeStyle = '#2a2a2a'
+        ctx.lineWidth = 1
+        // visible tile bounds
+        const left = screenToTile(0, 0).x - 1
+        const top = screenToTile(0, 0).y - 1
+        const right = screenToTile(canvas.width, canvas.height).x + 2
+        const bottom = screenToTile(canvas.width, canvas.height).y + 2
+        for (let x = left; x <= right; x++) {
+          const { sx } = worldToScreen(x, 0)
+          ctx.beginPath(); ctx.moveTo(sx + 0.5, 0); ctx.lineTo(sx + 0.5, canvas.height); ctx.stroke()
+        }
+        for (let y = top; y <= bottom; y++) {
+          const { sy } = worldToScreen(0, y)
+          ctx.beginPath(); ctx.moveTo(0, sy + 0.5); ctx.lineTo(canvas.width, sy + 0.5); ctx.stroke()
+        }
       }
     }
 
@@ -430,7 +460,7 @@ export default function Game() {
       window.removeEventListener('resize', resize)
       if (raf) cancelAnimationFrame(raf)
     }
-  }, [])
+  }, [isGridVisible, isSnapToGrid])
 
   return (
     <div className="workspace">
@@ -571,6 +601,30 @@ export default function Game() {
               ✎
             </button>
           </div>
+          
+          {/* Grid and Snap Settings */}
+          <div style={{ marginTop: '12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px' }}>
+              <input
+                type="checkbox"
+                id="snapToGrid"
+                checked={isSnapToGrid}
+                onChange={toggleSnapToGrid}
+                style={{ margin: 0 }}
+              />
+              <label htmlFor="snapToGrid" style={{ color: '#e6e6e6' }}>Snap to Grid</label>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px' }}>
+              <input
+                type="checkbox"
+                id="showGrid"
+                checked={isGridVisible}
+                onChange={toggleGrid}
+                style={{ margin: 0 }}
+              />
+              <label htmlFor="showGrid" style={{ color: '#e6e6e6' }}>Show Grid</label>
+            </div>
+          </div>
         </div>
 
         {/* Palette */}
@@ -645,7 +699,16 @@ export default function Game() {
           </div>
         </div>
 
-        <AssetPanel />
+        <AssetPanel 
+          onAssetsUpdate={(newAssets) => {
+            // Merge imported assets with existing assets
+            setAssets(prev => {
+              const existingIds = prev.map(a => a.id)
+              const uniqueNewAssets = newAssets.filter(a => !existingIds.includes(a.id))
+              return [...prev, ...uniqueNewAssets]
+            })
+          }}
+        />
         <GenerationParametersPanel />
       </div>
 

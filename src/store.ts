@@ -20,6 +20,9 @@ export interface Asset {
   src: string
   width: number
   height: number
+  // Grid dimensions - how many grid cells this asset occupies
+  gridWidth: number
+  gridHeight: number
 }
 
 export interface AssetInstance {
@@ -30,6 +33,9 @@ export interface AssetInstance {
   width: number
   height: number
   rotation: number
+  // Grid dimensions - how many grid cells this instance occupies
+  gridWidth: number
+  gridHeight: number
   selected?: boolean
 }
 

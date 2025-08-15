@@ -1,5 +1,6 @@
-﻿import React from 'react'
+import React from 'react'
 import { useMapStore } from '../mapStore'
+import { useUIStore } from '../uiStore'
 import type { AssetInstance } from '../store'
 
 // Custom hook for drag preview functionality
@@ -113,12 +114,13 @@ export function AssetInstanceComponent({
   instance,
   asset,
   worldToScreen,
-  // screenToTile,
+  screenToTile,
   scale,
-  // tileSize,
+  tileSize,
 }: AssetInstanceComponentProps) {
   const { selectedAssetInstances, selectAssetInstance, updateAssetInstance, deleteAssetInstance } = useMapStore()
   const isSelected = selectedAssetInstances.includes(instance.id)
+  const isSnapToGrid = useUIStore(state => state.isSnapToGrid)
 
   const { sx, sy } = worldToScreen(instance.x, instance.y)
   const displayWidth = instance.width * scale
@@ -130,74 +132,56 @@ export function AssetInstanceComponent({
       selectAssetInstance(instance.id)
     }
   }
+  
+  // Dragging functionality for moving assets
+  const handleDragStart = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (!isSelected) {
+      selectAssetInstance(instance.id)
+    }
+    
+    const startX = e.clientX
+    const startY = e.clientY
+    const startInstancePos = { x: instance.x, y: instance.y }
+    
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      // Calculate the mouse movement in screen coordinates
+      const deltaX = moveEvent.clientX - startX
+      const deltaY = moveEvent.clientY - startY
+      
+      // Convert the delta to world coordinates based on scale
+      const worldDeltaX = deltaX / (tileSize * scale)
+      const worldDeltaY = deltaY / (tileSize * scale)
+      
+      // Calculate new position
+      let newX = startInstancePos.x + worldDeltaX
+      let newY = startInstancePos.y + worldDeltaY
+      
+      // Snap to grid if enabled
+      if (isSnapToGrid) {
+        newX = Math.round(newX)
+        newY = Math.round(newY)
+      }
+      
+      // Update the asset position
+      updateAssetInstance(instance.id, { x: newX, y: newY })
+    }
+    
+    const handleMouseUp = () => {
+      document.removeEventListener('mousemove', handleMouseMove)
+      document.removeEventListener('mouseup', handleMouseUp)
+    }
+    
+    document.addEventListener('mousemove', handleMouseMove)
+    document.addEventListener('mouseup', handleMouseUp)
+  }
 
   const handleTransformStart = (e: React.MouseEvent, type: string, position: string) => {
     e.stopPropagation()
     
-    const startX = e.clientX
-    // const startY = e.clientY
-    const startInstance = { ...instance }
-
     const handleMouseMove = (moveEvent: MouseEvent) => {
-      const deltaX = moveEvent.clientX - startX
-      // const deltaY = moveEvent.clientY - startY
-
-      if (type === 'resize') {
-        const aspectRatio = startInstance.width / startInstance.height
-        let newWidth = startInstance.width
-        let newHeight = startInstance.height
-
-        // Calculate new size based on handle position
-        switch (position) {
-          case 'se':
-            newWidth = Math.max(8, startInstance.width + deltaX / scale)
-            newHeight = newWidth / aspectRatio
-            break
-          case 'nw':
-            newWidth = Math.max(8, startInstance.width - deltaX / scale)
-            newHeight = newWidth / aspectRatio
-            updateAssetInstance(instance.id, {
-              x: startInstance.x + (startInstance.width - newWidth),
-              y: startInstance.y + (startInstance.height - newHeight),
-              width: newWidth,
-              height: newHeight,
-            })
-            return
-          case 'ne':
-            newWidth = Math.max(8, startInstance.width + deltaX / scale)
-            newHeight = newWidth / aspectRatio
-            updateAssetInstance(instance.id, {
-              y: startInstance.y + (startInstance.height - newHeight),
-              width: newWidth,
-              height: newHeight,
-            })
-            return
-          case 'sw':
-            newWidth = Math.max(8, startInstance.width - deltaX / scale)
-            newHeight = newWidth / aspectRatio
-            updateAssetInstance(instance.id, {
-              x: startInstance.x + (startInstance.width - newWidth),
-              width: newWidth,
-              height: newHeight,
-            })
-            return
-          case 'e':
-            newWidth = Math.max(8, startInstance.width + deltaX / scale)
-            newHeight = newWidth / aspectRatio
-            break
-          case 'w':
-            newWidth = Math.max(8, startInstance.width - deltaX / scale)
-            newHeight = newWidth / aspectRatio
-            updateAssetInstance(instance.id, {
-              x: startInstance.x + (startInstance.width - newWidth),
-              width: newWidth,
-              height: newHeight,
-            })
-            return
-        }
-
-        updateAssetInstance(instance.id, { width: newWidth, height: newHeight })
-      } else if (type === 'rotate') {
+      // Only handle rotation since resize is disabled
+      if (type === 'rotate') {
         const centerX = sx + displayWidth / 2
         const centerY = sy + displayHeight / 2
         const angle = Math.atan2(moveEvent.clientY - centerY, moveEvent.clientX - centerX)
@@ -232,10 +216,12 @@ export function AssetInstanceComponent({
         transform: `rotate(${instance.rotation}deg)`,
         transformOrigin: 'center',
         border: isSelected ? '2px solid #007acc' : '1px solid transparent',
-        cursor: 'pointer',
+        cursor: isSelected ? 'move' : 'pointer',
         zIndex: 100,
+        pointerEvents: 'auto' // Enable pointer events for the asset
       }}
       onClick={handleSelect}
+      onMouseDown={handleDragStart} // Add drag start handler
       onKeyDown={handleKeyDown}
       tabIndex={0}
     >
@@ -254,17 +240,86 @@ export function AssetInstanceComponent({
       
       {isSelected && (
         <>
-          {/* Resize handles */}
-          <ResizeHandle type="resize" position="nw" onMouseDown={handleTransformStart} />
-          <ResizeHandle type="resize" position="ne" onMouseDown={handleTransformStart} />
-          <ResizeHandle type="resize" position="sw" onMouseDown={handleTransformStart} />
-          <ResizeHandle type="resize" position="se" onMouseDown={handleTransformStart} />
-          <ResizeHandle type="resize" position="n" onMouseDown={handleTransformStart} />
-          <ResizeHandle type="resize" position="s" onMouseDown={handleTransformStart} />
-          <ResizeHandle type="resize" position="w" onMouseDown={handleTransformStart} />
-          <ResizeHandle type="resize" position="e" onMouseDown={handleTransformStart} />
+          {/* Grid footprint visualization */}
+          <div style={{
+            position: 'absolute',
+            top: -2,
+            left: -2,
+            width: displayWidth + 4,
+            height: displayHeight + 4,
+            pointerEvents: 'none',
+            zIndex: 99
+          }}>
+            {/* Grid cells overlay with asset image */}
+            <div style={{
+              position: 'absolute',
+              top: 2,
+              left: 2,
+              width: displayWidth,
+              height: displayHeight,
+              display: 'grid',
+              gridTemplateColumns: `repeat(${instance.gridWidth || 1}, 1fr)`,
+              gridTemplateRows: `repeat(${instance.gridHeight || 1}, 1fr)`,
+              gap: '1px',
+              opacity: 0.7
+            }}>
+              {Array.from({ length: (instance.gridWidth || 1) * (instance.gridHeight || 1) }).map((_, i) => {
+                const gridWidth = instance.gridWidth || 1
+                const col = i % gridWidth
+                const row = Math.floor(i / gridWidth)
+                
+                return (
+                  <div
+                    key={i}
+                    style={{
+                      backgroundColor: '#007acc20',
+                      border: '1px solid #4a9eff',
+                      borderRadius: '2px',
+                      position: 'relative',
+                      overflow: 'hidden'
+                    }}
+                  >
+                    {/* Show portion of asset image in this grid cell */}
+                    {asset && (
+                      <img
+                        src={asset.src}
+                        alt={asset.name}
+                        style={{
+                          position: 'absolute',
+                          width: `${gridWidth * 100}%`,
+                          height: `${(instance.gridHeight || 1) * 100}%`,
+                          left: `-${col * 100}%`,
+                          top: `-${row * 100}%`,
+                          objectFit: 'contain',
+                          opacity: 0.6
+                        }}
+                      />
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+            
+            {/* Grid size indicator */}
+            <div style={{
+              position: 'absolute',
+              top: -20,
+              left: '50%',
+              transform: 'translateX(-50%)',
+              backgroundColor: 'rgba(0, 0, 0, 0.8)',
+              color: '#fff',
+              padding: '2px 6px',
+              borderRadius: '3px',
+              fontSize: '10px',
+              fontWeight: '500',
+              whiteSpace: 'nowrap',
+              border: '1px solid #007acc'
+            }}>
+              {instance.gridWidth || 1}×{instance.gridHeight || 1} cells
+            </div>
+          </div>
           
-          {/* Rotation handle */}
+          {/* Rotation handle only - no resize handles */}
           <ResizeHandle type="rotate" position="rotate" onMouseDown={handleTransformStart} />
         </>
       )}
