@@ -1,15 +1,21 @@
 import { useState, useRef } from 'react'
 import { useMapStore, useAssetInstances } from '../mapStore'
 import { useUIStore } from '../uiStore'
+import { getSavedMaps } from '../services/tauri'
 
 export function FileOperationsPanel() {
   const [isLoading, setIsLoading] = useState(false)
   const [lastOperationStatus, setLastOperationStatus] = useState<string | null>(null)
+  const [showDevInfo, setShowDevInfo] = useState(false)
   
   const saveMapToFile = useMapStore(state => state.saveMapToFile)
   const loadMapFromFile = useMapStore(state => state.loadMapFromFile)
   const assetInstances = useAssetInstances()
   const mapData = useMapStore(state => state.mapData)
+  
+  // Check if we're in development mode
+  const isDevelopmentMode = typeof window !== 'undefined' && (window as any).__TAURI__ === undefined
+  const savedMaps = isDevelopmentMode ? getSavedMaps() : []
   
   const handleSave = async () => {
     if (isLoading) return
@@ -230,6 +236,44 @@ export function FileOperationsPanel() {
         >
           🖼️ Export PNG {isLoading ? '...' : ''}
         </button>
+        
+        {isDevelopmentMode && (
+          <>
+            <button 
+              className="tool-button" 
+              onClick={() => setShowDevInfo(!showDevInfo)}
+              title="Show development mode information"
+              style={{ fontSize: '10px', opacity: 0.7 }}
+            >
+              ⚠️ Dev Mode {showDevInfo ? '▼' : '▶'}
+            </button>
+            {showDevInfo && (
+              <div style={{
+                padding: '8px',
+                fontSize: '11px',
+                backgroundColor: '#2a2a2a',
+                border: '1px solid #444',
+                borderRadius: '4px',
+                color: '#ccc'
+              }}>
+                <div style={{ marginBottom: '4px', fontWeight: 'bold' }}>Development Mode</div>
+                <div style={{ marginBottom: '4px' }}>Save/Load uses browser storage</div>
+                {savedMaps.length > 0 && (
+                  <div>
+                    <div style={{ marginBottom: '2px' }}>Saved maps:</div>
+                    {savedMaps.map(map => (
+                      <div key={map} style={{ marginLeft: '8px', fontSize: '10px' }}>• {map}</div>
+                    ))}
+                  </div>
+                )}
+                {savedMaps.length === 0 && (
+                  <div style={{ fontStyle: 'italic' }}>No saved maps yet</div>
+                )}
+              </div>
+            )}
+          </>
+        )}
+        
         {lastOperationStatus && (
           <div style={{
             padding: '4px 8px',
