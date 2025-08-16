@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "dndmapper",
-  "version": "0.0.1",
-  "identifier": "com.duann.dndmapper",
+  "productName": "Dungeon Desktop",
+  "version": "1.0.0",
+  "identifier": "com.studiocosmicnorth.dungeondesktop",
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://localhost:5173",
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "dndmapper",
+        "title": "Dungeon Desktop - Studio Cosmic North",
         "width": 1920,
         "height": 1080,
         "resizable": true,
