@@ -44,6 +44,7 @@ export default function Game() {
   const setSelected = useMapStore(state => state.setSelected)
   const assetInstances = useAssetInstances()
   const addAssetInstance = useMapStore(state => state.addAssetInstance)
+  const resetMap = useMapStore(state => state.reset)
   // const clearAssetSelection = useMapStore(state => state.clearAssetSelection)
 
   // Assets from persistent store
@@ -128,6 +129,16 @@ export default function Game() {
       }
     }
     setTool(newTool)
+  }
+  
+  // Handle clear map with confirmation
+  const handleClearMap = () => {
+    const confirmed = window.confirm(
+      'Are you sure you want to clear the entire map?\n\nThis will remove all tiles and assets. This action cannot be undone.'
+    )
+    if (confirmed) {
+      resetMap()
+    }
   }
   const currentLayer = useCurrentLayer()
   const setLayer = useMapStore(state => state.setLayer)
@@ -582,6 +593,34 @@ export default function Game() {
       {/* Sidebar */}
       <div className="sidebar">
         <FileOperationsPanel />
+        
+        {/* Clear Map Button */}
+        <div className="toolbar-section">
+          <button
+            onClick={handleClearMap}
+            style={{
+              padding: '8px 16px',
+              background: '#dc2626',
+              border: '1px solid #b91c1c',
+              borderRadius: '4px',
+              color: '#fff',
+              fontSize: '12px',
+              cursor: 'pointer',
+              width: '100%',
+              fontWeight: '500',
+              transition: 'background-color 0.2s'
+            }}
+            onMouseOver={(e) => {
+              e.currentTarget.style.backgroundColor = '#b91c1c'
+            }}
+            onMouseOut={(e) => {
+              e.currentTarget.style.backgroundColor = '#dc2626'
+            }}
+            title="Clear entire map (removes all tiles and assets)"
+          >
+            🗑️ Clear Map
+          </button>
+        </div>
         
         {/* Image Import */}
         <div className="toolbar-section">
