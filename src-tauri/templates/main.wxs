@@ -1,0 +1,185 @@
+<?xml version="1.0" encoding="windows-1252"?>
+<!-- 
+  Custom WiX Template for Studio Cosmic North - Dungeon Desktop
+  Enhanced MSI installer with proper uninstaller support
+-->
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+  <Product
+    Id="*"
+    Name="{{product_name}}"
+    Language="1033"
+    Version="{{version}}"
+    Manufacturer="Studio Cosmic North"
+    UpgradeCode="{{upgrade_code}}">
+
+    <Package 
+      InstallerVersion="450" 
+      Compressed="yes"
+      InstallScope="perMachine"
+      Description="Studio Cosmic North - Dungeon Desktop Installer"
+      Comments="Professional D&amp;D map creation and management tool"
+      Manufacturer="Studio Cosmic North" />
+
+    <!-- Major upgrade configuration -->
+    <MajorUpgrade 
+      DowngradeErrorMessage="A newer version of [ProductName] is already installed."
+      Schedule="afterInstallInitialize" />
+
+    <!-- Media and cab file -->
+    <MediaTemplate EmbedCab="yes" />
+
+    <!-- App icon for Add/Remove Programs -->
+    <Icon Id="ProductIcon" SourceFile="{{app_exe_source}}" />
+    <Property Id="ARPPRODUCTICON" Value="ProductIcon" />
+
+    <!-- Add/Remove Programs properties -->
+    <Property Id="ARPHELPLINK" Value="https://studiocosmicnorth.com/support" />
+    <Property Id="ARPURLINFOABOUT" Value="https://studiocosmicnorth.com" />
+    <Property Id="ARPNOMODIFY" Value="yes" />
+    <Property Id="ARPNOREPAIR" Value="yes" />
+    <Property Id="ARPSIZE" Value="{{estimated_size}}" />
+    
+    <!-- Application metadata -->
+    <Property Id="ARPCOMMENTS" Value="Professional D&amp;D map creation and management tool by Studio Cosmic North" />
+    <Property Id="ARPHELPLINK" Value="https://studiocosmicnorth.com/dungeondesktop/help" />
+    <Property Id="ARPURLUPDATEINFO" Value="https://studiocosmicnorth.com/dungeondesktop/updates" />
+
+    <!-- Installation directory structure -->
+    <Directory Id="TARGETDIR" Name="SourceDir">
+      <Directory Id="{{program_files_dir}}">
+        <Directory Id="APPLICATIONROOTDIRECTORY" Name="{{product_name}}">
+          <!-- Main application files -->
+          <Directory Id="BINDIR" Name="bin" />
+        </Directory>
+      </Directory>
+      
+      <!-- Start Menu shortcuts -->
+      <Directory Id="ProgramMenuFolder">
+        <Directory Id="ApplicationProgramsFolder" Name="Studio Cosmic North">
+          <Directory Id="DungeonDesktopProgramsFolder" Name="Dungeon Desktop" />
+        </Directory>
+      </Directory>
+      
+      <!-- Desktop shortcut (optional) -->
+      <Directory Id="DesktopFolder" Name="Desktop" />
+    </Directory>
+
+    <!-- Application files component -->
+    <DirectoryRef Id="BINDIR">
+      <Component Id="ApplicationFiles" Guid="{{component_guid}}">
+        <File Id="ApplicationExe" Source="{{app_exe_source}}" KeyPath="yes">
+          <Shortcut
+            Id="ApplicationStartMenuShortcut"
+            Directory="DungeonDesktopProgramsFolder"
+            Name="{{product_name}}"
+            Description="Professional D&amp;D map creation tool"
+            WorkingDirectory="BINDIR"
+            Icon="ProductIcon" />
+          
+          <!-- Optional desktop shortcut -->
+          <Shortcut
+            Id="ApplicationDesktopShortcut"
+            Directory="DesktopFolder"
+            Name="{{product_name}}"
+            Description="Professional D&amp;D map creation tool"
+            WorkingDirectory="BINDIR"
+            Icon="ProductIcon" />
+        </File>
+        
+        <!-- WebView2 files -->
+        {{#each webview2_files}}
+        <File Id="{{this.id}}" Source="{{this.source}}" />
+        {{/each}}
+        
+        <!-- Additional application files -->
+        {{#each resources}}
+        <File Id="{{this.id}}" Source="{{this.source}}" />
+        {{/each}}
+
+        <!-- Registry entries for proper uninstall -->
+        <RegistryKey Root="HKLM" Key="SOFTWARE\Studio Cosmic North\Dungeon Desktop">
+          <RegistryValue Name="InstallPath" Value="[BINDIR]" Type="string" />
+          <RegistryValue Name="Version" Value="{{version}}" Type="string" />
+          <RegistryValue Name="InstallDate" Value="[Date]" Type="string" />
+        </RegistryKey>
+
+        <!-- File associations (optional) -->
+        <RegistryKey Root="HKCR" Key=".ddmap">
+          <RegistryValue Value="DungeonDesktop.Map" Type="string" />
+        </RegistryKey>
+        <RegistryKey Root="HKCR" Key="DungeonDesktop.Map">
+          <RegistryValue Value="Dungeon Desktop Map File" Type="string" />
+        </RegistryKey>
+        <RegistryKey Root="HKCR" Key="DungeonDesktop.Map\DefaultIcon">
+          <RegistryValue Value="[BINDIR]{{app_exe_name}},0" Type="string" />
+        </RegistryKey>
+        <RegistryKey Root="HKCR" Key="DungeonDesktop.Map\shell\open\command">
+          <RegistryValue Value='"[BINDIR]{{app_exe_name}}" "%1"' Type="string" />
+        </RegistryKey>
+      </Component>
+    </DirectoryRef>
+
+    <!-- Uninstaller cleanup component -->
+    <DirectoryRef Id="APPLICATIONROOTDIRECTORY">
+      <Component Id="UninstallCleanup" Guid="{{cleanup_component_guid}}">
+        <!-- Custom action to clean user data on uninstall -->
+        <RemoveFolder Id="RemoveApplicationRoot" On="uninstall" />
+        
+        <!-- Registry cleanup -->
+        <RegistryKey Root="HKLM" Key="SOFTWARE\Studio Cosmic North\Dungeon Desktop" Action="removeOnUninstall" />
+        <RegistryKey Root="HKCU" Key="SOFTWARE\Studio Cosmic North\Dungeon Desktop" Action="removeOnUninstall" />
+      </Component>
+    </DirectoryRef>
+
+    <!-- Start menu folder cleanup -->
+    <DirectoryRef Id="DungeonDesktopProgramsFolder">
+      <Component Id="StartMenuCleanup" Guid="{{startmenu_component_guid}}">
+        <RemoveFolder Id="RemoveDungeonDesktopProgramsFolder" On="uninstall" />
+        <RemoveFolder Id="RemoveApplicationProgramsFolder" Directory="ApplicationProgramsFolder" On="uninstall" />
+        <RegistryValue Root="HKCU" Key="Software\Studio Cosmic North\Dungeon Desktop" Name="installed" Type="integer" Value="1" KeyPath="yes" />
+      </Component>
+    </DirectoryRef>
+
+    <!-- Feature definitions -->
+    <Feature Id="MainApplication" Title="Dungeon Desktop" Level="1" Description="Main application files">
+      <ComponentRef Id="ApplicationFiles" />
+      <ComponentRef Id="UninstallCleanup" />
+      <ComponentRef Id="StartMenuCleanup" />
+    </Feature>
+
+    <!-- Custom actions for cleanup -->
+    <CustomAction
+      Id="CleanUserData"
+      Directory="APPLICATIONROOTDIRECTORY"
+      ExeCommand='cmd.exe /c "if exist "%APPDATA%\Studio Cosmic North\Dungeon Desktop" rmdir /s /q "%APPDATA%\Studio Cosmic North\Dungeon Desktop""'
+      Execute="deferred"
+      Impersonate="yes"
+      Return="ignore" />
+
+    <CustomAction
+      Id="CleanTempFiles"
+      Directory="APPLICATIONROOTDIRECTORY"
+      ExeCommand='cmd.exe /c "if exist "%TEMP%\dungeon-desktop" rmdir /s /q "%TEMP%\dungeon-desktop""'
+      Execute="deferred"
+      Impersonate="yes"
+      Return="ignore" />
+
+    <!-- Installation sequence -->
+    <InstallExecuteSequence>
+      <Custom Action="CleanUserData" Before="RemoveFiles">REMOVE="ALL"</Custom>
+      <Custom Action="CleanTempFiles" Before="RemoveFiles">REMOVE="ALL"</Custom>
+    </InstallExecuteSequence>
+
+    <!-- UI configuration -->
+    <UIRef Id="WixUI_InstallDir" />
+    <Property Id="WIXUI_INSTALLDIR" Value="APPLICATIONROOTDIRECTORY" />
+    
+    <!-- License agreement (uncomment and provide license file) -->
+    <!-- <WixVariable Id="WixUILicenseRtf" Value="license.rtf" /> -->
+    
+    <!-- Custom branding images (uncomment when available) -->
+    <!-- <WixVariable Id="WixUIBannerBmp" Value="banner.bmp" /> -->
+    <!-- <WixVariable Id="WixUIDialogBmp" Value="dialog.bmp" /> -->
+
+  </Product>
+</Wix>

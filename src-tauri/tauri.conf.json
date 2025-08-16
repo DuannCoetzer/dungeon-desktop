@@ -33,6 +33,44 @@
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "publisher": "Studio Cosmic North",
+    "copyright": "Copyright © 2025 Studio Cosmic North. All rights reserved.",
+    "category": "Game",
+    "shortDescription": "Professional D&D map creation and management tool",
+    "longDescription": "Dungeon Desktop is a comprehensive tool for creating, editing, and managing D&D maps. Features include tile-based map building, asset management, character tokens, measurement tools, and export capabilities.",
+    "windows": {
+      "certificateThumbprint": null,
+      "digestAlgorithm": "sha256",
+      "timestampUrl": "http://timestamp.digicert.com",
+      "tsp": false,
+      "wix": {
+        "language": "en-US",
+        "template": "templates/main.wxs",
+        "fragmentPaths": [],
+        "componentGroupRefs": [],
+        "componentRefs": [],
+        "featureGroupRefs": [],
+        "featureRefs": [],
+        "mergeRefs": [],
+        "skipWebviewInstall": false,
+        "license": null,
+        "enableElevatedUpdateTask": false,
+        "bannerPath": null,
+        "dialogImagePath": null,
+        "fipsCompliant": false
+      },
+      "nsis": {
+        "license": null,
+        "headerImage": null,
+        "sidebarImage": null,
+        "installerIcon": null,
+        "installMode": "perMachine",
+        "languages": ["English"],
+        "displayLanguageSelector": false,
+        "customLanguageFiles": {},
+        "template": "templates/installer.nsi"
+      }
+    }
   }
 }
