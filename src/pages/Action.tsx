@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react'
 import { deserializeMap, setMapData, getMapData, subscribeToMapChanges, addCharacter, updateCharacter, deleteCharacter, moveCharacter, getCharacters } from '../protocol'
 import { ActionMapViewer } from '../components/ActionMapViewer'
 import { CharacterPanel } from '../components/CharacterPanel'
+import { MeasurementSettings } from '../components/MeasurementSettings'
 import type { MapData, CharacterToken } from '../protocol'
 import { useAssetStore } from '../store/assetStore'
 
@@ -18,6 +19,15 @@ export function Action({}: ActionProps = {}) {
   } | null>(null)
   const [selectedCharacter, setSelectedCharacter] = useState<CharacterToken | null>(null)
   const [characters, setCharacters] = useState<CharacterToken[]>([])
+  const [isCharacterPanelCollapsed, setIsCharacterPanelCollapsed] = useState(false)
+  const [isInfoPanelCollapsed, setIsInfoPanelCollapsed] = useState(false)
+  
+  // Measurement settings state
+  const [measurementSettings, setMeasurementSettings] = useState({
+    gridSize: 32, // TILE_SIZE from ActionMapViewer
+    distancePerCell: 5,
+    units: 'ft'
+  })
   
   const fileInputRef = useRef<HTMLInputElement>(null)
   const assetStore = useAssetStore()
@@ -139,83 +149,6 @@ export function Action({}: ActionProps = {}) {
       display: 'flex',
       flexDirection: 'column'
     }}>
-      {/* Header */}
-      <header style={{
-        padding: '16px 24px',
-        backgroundColor: '#161b22',
-        borderBottom: '1px solid #30363d',
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center'
-      }}>
-        <h1 style={{
-          fontSize: '24px',
-          fontWeight: '700',
-          margin: 0,
-          color: '#f0f6fc'
-        }}>
-          🎭 Action Mode - Map Explorer
-        </h1>
-
-        <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-          {mapInfo && (
-            <div style={{
-              fontSize: '14px',
-              color: '#7d8590',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '16px'
-            }}>
-              <span>📍 {mapInfo.name}</span>
-              {mapInfo.updatedAt && (
-                <span>🕒 {new Date(mapInfo.updatedAt).toLocaleDateString()}</span>
-              )}
-            </div>
-          )}
-          
-          <button
-            onClick={handleImportMap}
-            disabled={isLoading}
-            style={{
-              padding: '8px 16px',
-              backgroundColor: '#238636',
-              color: '#fff',
-              border: 'none',
-              borderRadius: '6px',
-              fontSize: '14px',
-              fontWeight: '500',
-              cursor: isLoading ? 'not-allowed' : 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-              opacity: isLoading ? 0.6 : 1
-            }}
-          >
-            📁 {isLoading ? 'Loading...' : 'Import Map'}
-          </button>
-
-          {mapData && (
-            <button
-              onClick={handleCloseMap}
-              style={{
-                padding: '8px 16px',
-                backgroundColor: '#da3633',
-                color: '#fff',
-                border: 'none',
-                borderRadius: '6px',
-                fontSize: '14px',
-                fontWeight: '500',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px'
-              }}
-            >
-              ✖️ Close Map
-            </button>
-          )}
-        </div>
-      </header>
 
       {/* Hidden file input */}
       <input
@@ -310,66 +243,246 @@ export function Action({}: ActionProps = {}) {
           <div style={{ flex: 1, display: 'flex' }}>
             {/* Character Panel */}
             <div style={{
-              width: '320px',
+              width: isCharacterPanelCollapsed ? '60px' : '320px',
               backgroundColor: '#0d1117',
               borderRight: '1px solid #30363d',
               padding: '16px',
-              overflowY: 'auto'
+              overflowY: 'auto',
+              transition: 'width 0.2s ease-in-out'
             }}>
-              <CharacterPanel
-                characters={characters}
-                onAddCharacter={handleAddCharacter}
-                onUpdateCharacter={handleUpdateCharacter}
-                onDeleteCharacter={handleDeleteCharacter}
-                onSelectCharacter={handleSelectCharacter}
-                selectedCharacter={selectedCharacter}
-              />
+              {/* Collapse toggle button */}
+              <div style={{
+                display: 'flex',
+                justifyContent: isCharacterPanelCollapsed ? 'center' : 'space-between',
+                alignItems: 'center',
+                marginBottom: isCharacterPanelCollapsed ? '0' : '16px'
+              }}>
+                {!isCharacterPanelCollapsed && (
+                  <h2 style={{
+                    margin: '0',
+                    fontSize: '18px',
+                    fontWeight: '600',
+                    color: '#f0f6fc'
+                  }}>
+                    🎭 Characters
+                  </h2>
+                )}
+                
+                <button
+                  onClick={() => setIsCharacterPanelCollapsed(!isCharacterPanelCollapsed)}
+                  style={{
+                    background: 'none',
+                    border: '1px solid #30363d',
+                    borderRadius: '4px',
+                    color: '#7d8590',
+                    cursor: 'pointer',
+                    fontSize: '16px',
+                    padding: '6px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    width: '28px',
+                    height: '28px'
+                  }}
+                  title={isCharacterPanelCollapsed ? "Expand character panel" : "Collapse character panel"}
+                >
+                  {isCharacterPanelCollapsed ? '▶' : '◀'}
+                </button>
+              </div>
+              
+              {!isCharacterPanelCollapsed && (
+                <>
+                  <CharacterPanel
+                    characters={characters}
+                    onAddCharacter={handleAddCharacter}
+                    onUpdateCharacter={handleUpdateCharacter}
+                    onDeleteCharacter={handleDeleteCharacter}
+                    onSelectCharacter={handleSelectCharacter}
+                    selectedCharacter={selectedCharacter}
+                  />
+                  
+                  {/* Measurement Settings - show only when map has content */}
+                  {mapData && (Object.keys(mapData.tiles?.floor || {}).length > 0 || Object.keys(mapData.tiles?.walls || {}).length > 0) && (
+                    <div style={{ marginTop: '16px' }}>
+                      <MeasurementSettings
+                        gridSize={measurementSettings.gridSize}
+                        distancePerCell={measurementSettings.distancePerCell}
+                        units={measurementSettings.units}
+                        onGridSizeChange={(size) => setMeasurementSettings(prev => ({ ...prev, gridSize: size }))}
+                        onDistancePerCellChange={(distance) => setMeasurementSettings(prev => ({ ...prev, distancePerCell: distance }))}
+                        onUnitsChange={(units) => setMeasurementSettings(prev => ({ ...prev, units }))}
+                      />
+                    </div>
+                  )}
+                </>
+              )}
             </div>
 
             {/* Map viewer area */}
             <div style={{ flex: 1, position: 'relative' }}>
-              <div style={{
-                position: 'absolute',
-                top: '16px',
-                left: '16px',
-                right: '16px',
-                backgroundColor: '#161b22',
-                border: '1px solid #30363d',
-                borderRadius: '6px',
-                padding: '12px',
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                zIndex: 10
-              }}>
-                <div>
-                  <h3 style={{ margin: 0, fontSize: '16px', fontWeight: '600' }}>
-                    🗺️ {mapInfo?.name}
-                  </h3>
-                  <p style={{ margin: '4px 0 0 0', fontSize: '12px', color: '#7d8590' }}>
-                    DM Mode - Drag to pan, scroll to zoom, click to place characters
-                  </p>
-                </div>
-                
-                <div style={{ fontSize: '12px', color: '#7d8590' }}>
-                  Content: {Object.keys(mapData.tiles?.floor || {}).length} floor, {Object.keys(mapData.tiles?.walls || {}).length} walls{Object.keys(mapData.tiles?.objects || {}).length > 0 && `, ${Object.keys(mapData.tiles.objects).length} objects`}{mapData.assetInstances && mapData.assetInstances.length > 0 && `, ${mapData.assetInstances.length} assets`}{characters.length > 0 && `, ${characters.length} characters`}
-                </div>
-              </div>
-
-              {/* Map viewer */}
-              <div style={{
-                position: 'absolute',
-                top: '80px', // Leave space for info bar
-                left: '0',
-                right: '0',
-                bottom: '0'
-              }}>
+              {/* Full-screen map viewer */}
               <ActionMapViewer 
                 mapData={mapData} 
                 onMoveCharacter={handleMoveCharacter}
                 selectedCharacterId={selectedCharacter?.id}
               />
+            </div>
+            
+            {/* Right Info Panel */}
+            <div style={{
+              width: isInfoPanelCollapsed ? '60px' : '320px',
+              backgroundColor: '#0d1117',
+              borderLeft: '1px solid #30363d',
+              padding: '16px',
+              overflowY: 'auto',
+              transition: 'width 0.2s ease-in-out'
+            }}>
+              {/* Info Panel Header */}
+              <div style={{
+                display: 'flex',
+                justifyContent: isInfoPanelCollapsed ? 'center' : 'space-between',
+                alignItems: 'center',
+                marginBottom: isInfoPanelCollapsed ? '0' : '16px'
+              }}>
+                {!isInfoPanelCollapsed && (
+                  <h2 style={{
+                    margin: '0',
+                    fontSize: '18px',
+                    fontWeight: '600',
+                    color: '#f0f6fc'
+                  }}>
+                    🗺️ Map Info
+                  </h2>
+                )}
+                
+                <button
+                  onClick={() => setIsInfoPanelCollapsed(!isInfoPanelCollapsed)}
+                  style={{
+                    background: 'none',
+                    border: '1px solid #30363d',
+                    borderRadius: '4px',
+                    color: '#7d8590',
+                    cursor: 'pointer',
+                    fontSize: '16px',
+                    padding: '6px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    width: '28px',
+                    height: '28px'
+                  }}
+                  title={isInfoPanelCollapsed ? "Expand info panel" : "Collapse info panel"}
+                >
+                  {isInfoPanelCollapsed ? '◀' : '▶'}
+                </button>
               </div>
+              
+              {!isInfoPanelCollapsed && (
+                <div>
+                  {/* Map Information */}
+                  <div style={{
+                    backgroundColor: '#161b22',
+                    border: '1px solid #30363d',
+                    borderRadius: '6px',
+                    padding: '12px',
+                    marginBottom: '16px'
+                  }}>
+                    <h3 style={{ margin: '0 0 8px 0', fontSize: '16px', fontWeight: '600' }}>
+                      {mapInfo?.name || 'Untitled Map'}
+                    </h3>
+                    
+                    {mapInfo?.updatedAt && (
+                      <p style={{ margin: '0 0 8px 0', fontSize: '12px', color: '#7d8590' }}>
+                        🕒 Last updated: {new Date(mapInfo.updatedAt).toLocaleDateString()}
+                      </p>
+                    )}
+                    
+                    <div style={{ fontSize: '12px', color: '#7d8590', marginBottom: '12px' }}>
+                      <div>Floor tiles: {Object.keys(mapData.tiles?.floor || {}).length}</div>
+                      <div>Wall tiles: {Object.keys(mapData.tiles?.walls || {}).length}</div>
+                      {Object.keys(mapData.tiles?.objects || {}).length > 0 && (
+                        <div>Objects: {Object.keys(mapData.tiles.objects).length}</div>
+                      )}
+                      {mapData.assetInstances && mapData.assetInstances.length > 0 && (
+                        <div>Assets: {mapData.assetInstances.length}</div>
+                      )}
+                      <div>Characters: {characters.length}</div>
+                    </div>
+                  </div>
+                  
+                  {/* Controls */}
+                  <div style={{
+                    backgroundColor: '#161b22',
+                    border: '1px solid #30363d',
+                    borderRadius: '6px',
+                    padding: '12px',
+                    marginBottom: '16px'
+                  }}>
+                    <h4 style={{ margin: '0 0 12px 0', fontSize: '14px', fontWeight: '600', color: '#f0f6fc' }}>
+                      Actions
+                    </h4>
+                    
+                    <button
+                      onClick={handleImportMap}
+                      disabled={isLoading}
+                      style={{
+                        width: '100%',
+                        padding: '8px 12px',
+                        backgroundColor: '#238636',
+                        color: '#fff',
+                        border: 'none',
+                        borderRadius: '4px',
+                        fontSize: '12px',
+                        fontWeight: '500',
+                        cursor: isLoading ? 'not-allowed' : 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '6px',
+                        marginBottom: '8px',
+                        opacity: isLoading ? 0.6 : 1
+                      }}
+                    >
+                      📁 {isLoading ? 'Loading...' : 'Import Map'}
+                    </button>
+                    
+                    <button
+                      onClick={handleCloseMap}
+                      style={{
+                        width: '100%',
+                        padding: '8px 12px',
+                        backgroundColor: '#da3633',
+                        color: '#fff',
+                        border: 'none',
+                        borderRadius: '4px',
+                        fontSize: '12px',
+                        fontWeight: '500',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '6px'
+                      }}
+                    >
+                      ✖️ Close Map
+                    </button>
+                  </div>
+                  
+                  {/* Help Text */}
+                  <div style={{
+                    fontSize: '11px',
+                    color: '#6e7681',
+                    textAlign: 'center',
+                    lineHeight: 1.4
+                  }}>
+                    Left: Move chars<br/>
+                    Middle: Pan map<br/>
+                    Right: Measure<br/>
+                    Scroll: Zoom<br/>
+                    `: Clear measures
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}

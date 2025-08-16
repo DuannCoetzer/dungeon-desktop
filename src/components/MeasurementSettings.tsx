@@ -21,14 +21,10 @@ export function MeasurementSettings({
   
   return (
     <div style={{
-      position: 'absolute',
-      top: '16px',
-      left: '16px',
       backgroundColor: '#161b22',
       border: '1px solid #30363d',
       borderRadius: '8px',
       padding: '16px',
-      minWidth: '200px',
       fontSize: '14px',
       color: '#e6edf3'
     }}>

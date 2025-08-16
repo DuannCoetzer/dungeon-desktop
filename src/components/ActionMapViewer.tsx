@@ -1,7 +1,6 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react'
 import type { MapData } from '../protocol'
 import { useAssetStore } from '../store/assetStore'
-import { MeasurementSettings } from './MeasurementSettings'
 
 interface ActionMapViewerProps {
   mapData: MapData
@@ -59,6 +58,7 @@ export function ActionMapViewer({ mapData, onMoveCharacter, selectedCharacterId 
     endX: number
     endY: number
   } | null>(null)
+  const [isMeasurementSummaryCollapsed, setIsMeasurementSummaryCollapsed] = useState(false)
 
   // Simple tile colors for rendering (since we don't have tile images in Action mode)
   const getTileColor = (tileType: string): string => {
@@ -778,37 +778,91 @@ export function ActionMapViewer({ mapData, onMoveCharacter, selectedCharacterId 
     })
   }
 
-  // Handle canvas resize
+  // Handle canvas resize with improved debouncing
   useEffect(() => {
+    let resizeTimeoutRef: NodeJS.Timeout | null = null
+    let renderTimeoutRef: NodeJS.Timeout | null = null
+    
     const resizeCanvas = () => {
       const canvas = canvasRef.current
       const container = containerRef.current
       if (!canvas || !container) return
       
       const rect = container.getBoundingClientRect()
-      canvas.width = rect.width
-      canvas.height = rect.height
       
-      // Trigger re-render
-      renderMap()
+      // Only resize if dimensions actually changed significantly (avoid micro-changes)
+      const newWidth = Math.floor(rect.width)
+      const newHeight = Math.floor(rect.height)
+      const currentWidth = canvas.width
+      const currentHeight = canvas.height
+      
+      if (Math.abs(newWidth - currentWidth) > 2 || Math.abs(newHeight - currentHeight) > 2) {
+        canvas.width = newWidth
+        canvas.height = newHeight
+        
+        // Render immediately after resize to prevent black canvas
+        renderMap()
+      }
     }
     
+    const debouncedResize = () => {
+      // Clear any existing timeout
+      if (resizeTimeoutRef) {
+        clearTimeout(resizeTimeoutRef)
+      }
+      
+      // Debounce the resize to prevent multiple rapid calls
+      resizeTimeoutRef = setTimeout(() => {
+        resizeCanvas()
+      }, 16) // Shorter debounce for better responsiveness
+    }
+    
+    // Initial resize
     resizeCanvas()
-    window.addEventListener('resize', resizeCanvas)
-    return () => window.removeEventListener('resize', resizeCanvas)
-  }, [renderMap])
+    
+    // Use ResizeObserver for better container size tracking
+    let resizeObserver: ResizeObserver | null = null
+    
+    if (containerRef.current && 'ResizeObserver' in window) {
+      resizeObserver = new ResizeObserver(debouncedResize)
+      resizeObserver.observe(containerRef.current)
+    } else {
+      // Fallback to window resize
+      window.addEventListener('resize', debouncedResize)
+    }
+    
+    return () => {
+      if (resizeTimeoutRef) {
+        clearTimeout(resizeTimeoutRef)
+      }
+      if (renderTimeoutRef) {
+        clearTimeout(renderTimeoutRef)
+      }
+      if (resizeObserver) {
+        resizeObserver.disconnect()
+      } else {
+        window.removeEventListener('resize', debouncedResize)
+      }
+    }
+  }, [renderMap]) // Re-add renderMap dependency since we need it for immediate render
 
-  // Auto-fit map on initial load (but not when characters move)
+  // Auto-fit map on initial load only (not on resize)
+  const [hasAutoFitted, setHasAutoFitted] = useState(false)
+  
   useEffect(() => {
-    // Don't auto-fit if we're currently dragging a character
-    if (isDraggingCharacter) return
-    
-    const timer = setTimeout(() => {
-      handleResetView()
-    }, 100) // Small delay to ensure canvas is ready
-    
-    return () => clearTimeout(timer)
-  }, [mapData.tiles, mapData.assetInstances]) // Only trigger on map structure changes, not character changes
+    // Only auto-fit once when map data first loads
+    if (!hasAutoFitted && mapData && mapData.tiles && Object.keys(mapData.tiles.floor || {}).length > 0) {
+      // Don't auto-fit if we're currently dragging a character
+      if (isDraggingCharacter) return
+      
+      const timer = setTimeout(() => {
+        handleResetView()
+        setHasAutoFitted(true)
+      }, 200) // Slightly longer delay to ensure everything is ready
+      
+      return () => clearTimeout(timer)
+    }
+  }, [mapData, hasAutoFitted, isDraggingCharacter]) // Only run when map data changes or auto-fit status changes
 
   // Set up native wheel event listener to avoid passive event listener issues
   useEffect(() => {
@@ -882,82 +936,103 @@ export function ActionMapViewer({ mapData, onMoveCharacter, selectedCharacterId 
         }}
       />
 
-      {/* Measurement settings panel */}
-      <MeasurementSettings
-        gridSize={measurementSettings.gridSize}
-        distancePerCell={measurementSettings.distancePerCell}
-        units={measurementSettings.units}
-        onGridSizeChange={(size) => setMeasurementSettings(prev => ({ ...prev, gridSize: size }))}
-        onDistancePerCellChange={(distance) => setMeasurementSettings(prev => ({ ...prev, distancePerCell: distance }))}
-        onUnitsChange={(units) => setMeasurementSettings(prev => ({ ...prev, units }))}
-      />
       
       {/* Measurement summary panel */}
       {measurementLines.length > 0 && (
         <div style={{
           position: 'absolute',
-          top: '16px',
-          right: '16px',
+          bottom: '16px',
+          left: '16px',
           backgroundColor: '#161b22',
           border: '1px solid #30363d',
           borderRadius: '8px',
           padding: '12px',
           fontSize: '14px',
           color: '#e6edf3',
-          minWidth: '200px'
+          minWidth: '200px',
+          maxWidth: '300px'
         }}>
-          <h3 style={{
-            margin: '0 0 8px 0',
-            fontSize: '16px',
-            fontWeight: '600',
-            color: '#f0f6fc'
-          }}>Measurements</h3>
-          
           <div style={{
-            maxHeight: '200px',
-            overflowY: 'auto',
-            marginBottom: '8px'
-          }}>
-            {measurementLines.map((line, index) => {
-              const calculatedDistance = line.gridDistance * measurementSettings.distancePerCell
-              return (
-                <div key={line.id} style={{
-                  fontSize: '12px',
-                  color: '#7d8590',
-                  marginBottom: '2px',
-                  display: 'flex',
-                  justifyContent: 'space-between'
-                }}>
-                  <span>Line {index + 1}:</span>
-                  <span style={{ color: '#ff6b35' }}>
-                    {calculatedDistance.toFixed(1)} {measurementSettings.units}
-                  </span>
-                </div>
-              )
-            })}
-          </div>
-          
-          <div style={{
-            borderTop: '1px solid #30363d',
-            paddingTop: '8px',
             display: 'flex',
             justifyContent: 'space-between',
-            fontWeight: '600'
+            alignItems: 'center',
+            marginBottom: '8px'
           }}>
-            <span>Total Distance:</span>
-            <span style={{ color: '#ff6b35' }}>
-              {measurementLines.reduce((sum, line) => sum + (line.gridDistance * measurementSettings.distancePerCell), 0).toFixed(1)} {measurementSettings.units}
-            </span>
+            <h3 style={{
+              margin: '0',
+              fontSize: '16px',
+              fontWeight: '600',
+              color: '#f0f6fc'
+            }}>Measurements</h3>
+            
+            <button
+              onClick={() => setIsMeasurementSummaryCollapsed(!isMeasurementSummaryCollapsed)}
+              style={{
+                background: 'none',
+                border: 'none',
+                color: '#7d8590',
+                cursor: 'pointer',
+                fontSize: '16px',
+                padding: '4px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}
+              title={isMeasurementSummaryCollapsed ? "Expand summary" : "Collapse summary"}
+            >
+              {isMeasurementSummaryCollapsed ? '▶' : '▼'}
+            </button>
           </div>
           
-          <div style={{
-            fontSize: '10px',
-            color: '#888',
-            marginTop: '8px',
-            textAlign: 'center'
-          }}>
-            Press ` to clear all
-          </div>
+          {!isMeasurementSummaryCollapsed && (
+            <>
+              <div style={{
+                maxHeight: '200px',
+                overflowY: 'auto',
+                marginBottom: '8px'
+              }}>
+                {measurementLines.map((line, index) => {
+                  const calculatedDistance = line.gridDistance * measurementSettings.distancePerCell
+                  return (
+                    <div key={line.id} style={{
+                      fontSize: '12px',
+                      color: '#7d8590',
+                      marginBottom: '2px',
+                      display: 'flex',
+                      justifyContent: 'space-between'
+                    }}>
+                      <span>Line {index + 1}:</span>
+                      <span style={{ color: '#ff6b35' }}>
+                        {calculatedDistance.toFixed(1)} {measurementSettings.units}
+                      </span>
+                    </div>
+                  )
+                })}
+              </div>
+              
+              <div style={{
+                borderTop: '1px solid #30363d',
+                paddingTop: '8px',
+                display: 'flex',
+                justifyContent: 'space-between',
+                fontWeight: '600'
+              }}>
+                <span>Total Distance:</span>
+                <span style={{ color: '#ff6b35' }}>
+                  {measurementLines.reduce((sum, line) => sum + (line.gridDistance * measurementSettings.distancePerCell), 0).toFixed(1)} {measurementSettings.units}
+                </span>
+              </div>
+              
+              <div style={{
+                fontSize: '10px',
+                color: '#888',
+                marginTop: '8px',
+                textAlign: 'center'
+              }}>
+                Press ` to clear all
+              </div>
+            </>
+          )}
         </div>
       )}
       
@@ -974,26 +1049,6 @@ export function ActionMapViewer({ mapData, onMoveCharacter, selectedCharacterId 
         borderRadius: '8px',
         border: '1px solid #30363d'
       }}>
-        <button
-          onClick={handleResetView}
-          style={{
-            padding: '8px 12px',
-            backgroundColor: '#238636',
-            color: '#fff',
-            border: 'none',
-            borderRadius: '4px',
-            fontSize: '12px',
-            fontWeight: '500',
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px'
-          }}
-          title="Fit map to view"
-        >
-          🎯 Fit View
-        </button>
-        
         <div style={{
           fontSize: '11px',
           color: '#7d8590',

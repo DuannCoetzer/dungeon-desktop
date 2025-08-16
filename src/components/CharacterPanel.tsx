@@ -33,6 +33,7 @@ export function CharacterPanel({
   onSelectCharacter,
   selectedCharacter
 }: CharacterPanelProps) {
+  const [isCollapsed, setIsCollapsed] = useState(false)
   const [isAddingCharacter, setIsAddingCharacter] = useState(false)
   const [editingCharacter, setEditingCharacter] = useState<string | null>(null)
   const [newCharacter, setNewCharacter] = useState<NewCharacterForm>({
@@ -97,7 +98,7 @@ export function CharacterPanel({
         display: 'flex',
         justifyContent: 'space-between',
         alignItems: 'center',
-        marginBottom: '16px'
+        marginBottom: isCollapsed ? '0' : '16px'
       }}>
         <h3 style={{
           margin: 0,
@@ -107,31 +108,55 @@ export function CharacterPanel({
           🎭 Characters ({characters.length})
         </h3>
         
-        <button
-          onClick={() => setIsAddingCharacter(true)}
-          style={{
-            padding: '6px 12px',
-            backgroundColor: '#238636',
-            color: '#fff',
-            border: 'none',
-            borderRadius: '4px',
-            fontSize: '12px',
-            cursor: 'pointer'
-          }}
-        >
-          + Add
-        </button>
+        <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+          {!isCollapsed && (
+            <button
+              onClick={() => setIsAddingCharacter(true)}
+              style={{
+                padding: '6px 12px',
+                backgroundColor: '#238636',
+                color: '#fff',
+                border: 'none',
+                borderRadius: '4px',
+                fontSize: '12px',
+                cursor: 'pointer'
+              }}
+            >
+              + Add
+            </button>
+          )}
+          
+          <button
+            onClick={() => setIsCollapsed(!isCollapsed)}
+            style={{
+              background: 'none',
+              border: 'none',
+              color: '#7d8590',
+              cursor: 'pointer',
+              fontSize: '16px',
+              padding: '4px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}
+            title={isCollapsed ? 'Expand panel' : 'Collapse panel'}
+          >
+            {isCollapsed ? '▶' : '▼'}
+          </button>
+        </div>
       </div>
 
-      {/* Add Character Form */}
-      {isAddingCharacter && (
-        <div style={{
-          padding: '12px',
-          backgroundColor: '#0d1117',
-          borderRadius: '6px',
-          marginBottom: '12px',
-          border: '1px solid #30363d'
-        }}>
+      {!isCollapsed && (
+        <>
+          {/* Add Character Form */}
+          {isAddingCharacter && (
+            <div style={{
+              padding: '12px',
+              backgroundColor: '#0d1117',
+              borderRadius: '6px',
+              marginBottom: '12px',
+              border: '1px solid #30363d'
+            }}>
           <div style={{ marginBottom: '8px' }}>
             <label style={{ display: 'block', fontSize: '12px', marginBottom: '4px' }}>
               Character Name
@@ -441,18 +466,20 @@ export function CharacterPanel({
         )}
       </div>
 
-      {selectedCharacter && (
-        <div style={{
-          marginTop: '12px',
-          padding: '8px',
-          backgroundColor: '#0d1117',
-          borderRadius: '4px',
-          border: '1px solid #30363d',
-          fontSize: '11px',
-          color: '#7d8590'
-        }}>
-          💡 Click on the map to move {selectedCharacter.name}
-        </div>
+          {selectedCharacter && (
+            <div style={{
+              marginTop: '12px',
+              padding: '8px',
+              backgroundColor: '#0d1117',
+              borderRadius: '4px',
+              border: '1px solid #30363d',
+              fontSize: '11px',
+              color: '#7d8590'
+            }}>
+              💡 Click on the map to move {selectedCharacter.name}
+            </div>
+          )}
+        </>
       )}
     </div>
   )
