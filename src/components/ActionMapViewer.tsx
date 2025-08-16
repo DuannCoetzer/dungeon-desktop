@@ -959,8 +959,8 @@ export function ActionMapViewer({ mapData, onMoveCharacter, selectedCharacterId 
       {measurementLines.length > 0 && (
         <div style={{
           position: 'absolute',
-          bottom: '16px',
-          left: '16px',
+          top: '16px',
+          right: '16px',
           backgroundColor: '#161b22',
           border: '1px solid #30363d',
           borderRadius: '8px',
