@@ -49,7 +49,8 @@ export default function Game() {
   // Assets from persistent store
   const assets = useAllAssets()
 
-  // Camera transform state - exposed to track canvas transforms
+  // Camera transform state - using refs to avoid re-render loops
+  const cameraTransformRef = useRef({ scale: 1, offsetX: 0, offsetY: 0 })
   const [cameraTransform, setCameraTransform] = useState({ scale: 1, offsetX: 0, offsetY: 0 })
   
   // Handle image import completion
@@ -505,7 +506,8 @@ export default function Game() {
         lastX = px
         lastY = py
         
-        // Update the camera transform state
+        // Update the camera transform ref and state
+        cameraTransformRef.current = { scale, offsetX, offsetY }
         setCameraTransform({ scale, offsetX, offsetY })
         scheduleDraw()
       } else {
@@ -552,7 +554,8 @@ export default function Game() {
         offsetX = px - (px - offsetX) * (scale / oldScale)
         offsetY = py - (py - offsetY) * (scale / oldScale)
         
-        // Update the camera transform state
+        // Update the camera transform ref and state
+        cameraTransformRef.current = { scale, offsetX, offsetY }
         setCameraTransform({ scale, offsetX, offsetY })
         scheduleDraw()
       }

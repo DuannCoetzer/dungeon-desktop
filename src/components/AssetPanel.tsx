@@ -284,9 +284,15 @@ export function AssetPanel({}: AssetPanelProps = {}) {
         canvas.width = width
         canvas.height = height
         
-        // Draw and compress the image
+        // Clear canvas to ensure transparency is preserved
+        ctx.clearRect(0, 0, width, height)
+        
+        // Draw the image
         ctx.drawImage(img, 0, 0, width, height)
-        const compressedDataUrl = canvas.toDataURL('image/jpeg', quality)
+        
+        // Use PNG format to preserve transparency instead of JPEG
+        // PNG doesn't have a quality parameter, so we ignore it for transparency
+        const compressedDataUrl = canvas.toDataURL('image/png')
         resolve(compressedDataUrl)
       }
       img.src = dataUrl
