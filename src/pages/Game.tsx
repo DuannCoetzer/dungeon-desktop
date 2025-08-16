@@ -309,9 +309,7 @@ export default function Game() {
 
     let raf = 0
     let lastDrawTime = 0
-    let debounceTimeout = 0
     const maxFPS = 60 // Cap at 60 FPS for better performance
-    const debounceDelay = 8 // 8ms debounce for batching tile operations
     
     const drawAll = () => { 
       drawGrid(); 
@@ -342,15 +340,6 @@ export default function Game() {
           scheduleDraw()
         }
       })
-    }
-    
-    // Debounced draw for batching multiple operations
-    const debouncedDraw = () => {
-      if (debounceTimeout) clearTimeout(debounceTimeout)
-      
-      debounceTimeout = window.setTimeout(() => {
-        scheduleDraw()
-      }, debounceDelay)
     }
 
     // Handle input
@@ -395,7 +384,7 @@ export default function Game() {
       
       const currentTool = toolManager.getTool(useUIStore.getState().selectedTool)
       currentTool.onDown(context)
-      debouncedDraw() // Use debounced draw for better performance
+      scheduleDraw() // Trigger redraw after tool operation
     }
 
     const handleMove = (px: number, py: number, event?: PointerEvent | MouseEvent) => {
@@ -417,7 +406,7 @@ export default function Game() {
       
       const currentTool = toolManager.getTool(useUIStore.getState().selectedTool)
       currentTool.onMove(context)
-      debouncedDraw() // Use debounced draw for better performance
+      scheduleDraw() // Trigger redraw after tool operation
     }
 
     const handleUp = (px: number, py: number, event?: PointerEvent | MouseEvent) => {
