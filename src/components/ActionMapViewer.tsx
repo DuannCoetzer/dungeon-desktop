@@ -1,6 +1,7 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react'
 import type { MapData } from '../protocol'
 import { useAssetStore } from '../store/assetStore'
+import { MeasurementSettings } from './MeasurementSettings'
 
 interface ActionMapViewerProps {
   mapData: MapData
@@ -34,6 +35,30 @@ export function ActionMapViewer({ mapData, onMoveCharacter, selectedCharacterId 
   const [draggedCharacter, setDraggedCharacter] = useState<string | null>(null)
   const [lastMouse, setLastMouse] = useState({ x: 0, y: 0 })
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 })
+
+  // Measurement system state
+  const [measurementSettings, setMeasurementSettings] = useState({
+    gridSize: TILE_SIZE,
+    distancePerCell: 5,
+    units: 'ft'
+  })
+
+  // Measurement lines state - store grid distance instead of calculated distance
+  const [measurementLines, setMeasurementLines] = useState<{
+    id: string
+    startX: number
+    startY: number
+    endX: number
+    endY: number
+    gridDistance: number // Distance in grid units, will be multiplied by distancePerCell
+  }[]>([])
+  const [isDrawingMeasurement, setIsDrawingMeasurement] = useState(false)
+  const [currentMeasurement, setCurrentMeasurement] = useState<{
+    startX: number
+    startY: number
+    endX: number
+    endY: number
+  } | null>(null)
 
   // Simple tile colors for rendering (since we don't have tile images in Action mode)
   const getTileColor = (tileType: string): string => {
@@ -370,13 +395,148 @@ export function ActionMapViewer({ mapData, onMoveCharacter, selectedCharacterId 
         }
       }
       
+      // Render measurement lines on top of everything else
+      if (measurementLines.length > 0 || currentMeasurement) {
+        ctx.save()
+        
+        // Render completed measurement lines
+        for (const line of measurementLines) {
+          ctx.strokeStyle = '#ff6b35'
+          ctx.lineWidth = 3 / viewport.scale
+          ctx.setLineDash([5 / viewport.scale, 5 / viewport.scale])
+          
+          ctx.beginPath()
+          ctx.moveTo(line.startX, line.startY)
+          ctx.lineTo(line.endX, line.endY)
+          ctx.stroke()
+          
+          // Draw start point
+          ctx.fillStyle = '#ff6b35'
+          ctx.setLineDash([]) // Reset line dash for solid circles
+          ctx.beginPath()
+          ctx.arc(line.startX, line.startY, 6 / viewport.scale, 0, Math.PI * 2)
+          ctx.fill()
+          
+          // Draw start point border
+          ctx.strokeStyle = '#ffffff'
+          ctx.lineWidth = 2 / viewport.scale
+          ctx.stroke()
+          
+          // Draw end point
+          ctx.fillStyle = '#ff6b35'
+          ctx.beginPath()
+          ctx.arc(line.endX, line.endY, 6 / viewport.scale, 0, Math.PI * 2)
+          ctx.fill()
+          
+          // Draw end point border
+          ctx.strokeStyle = '#ffffff'
+          ctx.lineWidth = 2 / viewport.scale
+          ctx.stroke()
+          
+          // Draw distance label - calculate distance dynamically
+          const midX = (line.startX + line.endX) / 2
+          const midY = (line.startY + line.endY) / 2
+          
+          ctx.fillStyle = '#ff6b35'
+          ctx.font = `bold ${14 / viewport.scale}px sans-serif`
+          ctx.textAlign = 'center'
+          ctx.textBaseline = 'bottom'
+          
+          // Calculate distance using current settings
+          const calculatedDistance = line.gridDistance * measurementSettings.distancePerCell
+          const text = `${calculatedDistance.toFixed(1)} ${measurementSettings.units}`
+          
+          // Draw text background
+          const textMetrics = ctx.measureText(text)
+          const padding = 4 / viewport.scale
+          ctx.fillStyle = 'rgba(0, 0, 0, 0.7)'
+          ctx.fillRect(
+            midX - textMetrics.width / 2 - padding,
+            midY - 14 / viewport.scale - padding,
+            textMetrics.width + 2 * padding,
+            14 / viewport.scale + 2 * padding
+          )
+          
+          // Draw text
+          ctx.fillStyle = '#ff6b35'
+          ctx.fillText(text, midX, midY)
+        }
+        
+        // Render current measurement being drawn
+        if (currentMeasurement) {
+          ctx.strokeStyle = '#ff6b35'
+          ctx.lineWidth = 3 / viewport.scale
+          ctx.setLineDash([5 / viewport.scale, 5 / viewport.scale])
+          
+          ctx.beginPath()
+          ctx.moveTo(currentMeasurement.startX, currentMeasurement.startY)
+          ctx.lineTo(currentMeasurement.endX, currentMeasurement.endY)
+          ctx.stroke()
+          
+          // Draw start point for current measurement
+          ctx.fillStyle = '#ff6b35'
+          ctx.setLineDash([]) // Reset line dash for solid circles
+          ctx.beginPath()
+          ctx.arc(currentMeasurement.startX, currentMeasurement.startY, 6 / viewport.scale, 0, Math.PI * 2)
+          ctx.fill()
+          
+          // Draw start point border
+          ctx.strokeStyle = '#ffffff'
+          ctx.lineWidth = 2 / viewport.scale
+          ctx.stroke()
+          
+          // Draw end point for current measurement
+          ctx.fillStyle = '#ff6b35'
+          ctx.beginPath()
+          ctx.arc(currentMeasurement.endX, currentMeasurement.endY, 6 / viewport.scale, 0, Math.PI * 2)
+          ctx.fill()
+          
+          // Draw end point border
+          ctx.strokeStyle = '#ffffff'
+          ctx.lineWidth = 2 / viewport.scale
+          ctx.stroke()
+          
+          // Calculate and show distance for current measurement
+          const dx = (currentMeasurement.endX - currentMeasurement.startX) / measurementSettings.gridSize
+          const dy = (currentMeasurement.endY - currentMeasurement.startY) / measurementSettings.gridSize
+          const distance = Math.sqrt(dx * dx + dy * dy) * measurementSettings.distancePerCell
+          
+          const midX = (currentMeasurement.startX + currentMeasurement.endX) / 2
+          const midY = (currentMeasurement.startY + currentMeasurement.endY) / 2
+          
+          ctx.fillStyle = '#ff6b35'
+          ctx.font = `bold ${14 / viewport.scale}px sans-serif`
+          ctx.textAlign = 'center'
+          ctx.textBaseline = 'bottom'
+          
+          const text = `${distance.toFixed(1)} ${measurementSettings.units}`
+          
+          // Draw text background
+          const textMetrics = ctx.measureText(text)
+          const padding = 4 / viewport.scale
+          ctx.fillStyle = 'rgba(0, 0, 0, 0.7)'
+          ctx.fillRect(
+            midX - textMetrics.width / 2 - padding,
+            midY - 14 / viewport.scale - padding,
+            textMetrics.width + 2 * padding,
+            14 / viewport.scale + 2 * padding
+          )
+          
+          // Draw text
+          ctx.fillStyle = '#ff6b35'
+          ctx.fillText(text, midX, midY)
+        }
+        
+        ctx.restore()
+      }
+      
       // Restore context
       ctx.restore()
     } finally {
       // Always reset the rendering flag
       renderingRef.current = false
     }
-  }, [mapData, viewport, assetStore])
+  }, [mapData, viewport, assetStore, measurementLines, currentMeasurement, measurementSettings])
 
   // Helper function to convert screen coordinates to world coordinates
   const screenToWorld = useCallback((screenX: number, screenY: number) => {
@@ -417,8 +577,33 @@ export function ActionMapViewer({ mapData, onMoveCharacter, selectedCharacterId 
     return null
   }, [mapData.characters])
 
+  // Helper function to snap coordinates to grid centers
+  const snapToGridCenter = useCallback((worldX: number, worldY: number) => {
+    const gridX = Math.floor(worldX / measurementSettings.gridSize)
+    const gridY = Math.floor(worldY / measurementSettings.gridSize)
+    return {
+      x: gridX * measurementSettings.gridSize + measurementSettings.gridSize / 2,
+      y: gridY * measurementSettings.gridSize + measurementSettings.gridSize / 2
+    }
+  }, [measurementSettings.gridSize])
+
   const handleMouseDown = (event: React.MouseEvent) => {
     event.preventDefault()
+    
+    // Right mouse button (button 2) for measurement
+    if (event.button === 2) {
+      const worldPos = screenToWorld(event.clientX, event.clientY)
+      const snappedPos = snapToGridCenter(worldPos.x, worldPos.y)
+      
+      setIsDrawingMeasurement(true)
+      setCurrentMeasurement({
+        startX: snappedPos.x,
+        startY: snappedPos.y,
+        endX: snappedPos.x,
+        endY: snappedPos.y
+      })
+      return
+    }
     
     // Middle mouse button (button 1) for map panning
     if (event.button === 1) {
@@ -444,7 +629,17 @@ export function ActionMapViewer({ mapData, onMoveCharacter, selectedCharacterId 
   }
 
   const handleMouseMove = (event: React.MouseEvent) => {
-    if (isDraggingCharacter && draggedCharacter && onMoveCharacter) {
+    if (isDrawingMeasurement && currentMeasurement) {
+      // Handle measurement drawing - update end position
+      const worldPos = screenToWorld(event.clientX, event.clientY)
+      const snappedPos = snapToGridCenter(worldPos.x, worldPos.y)
+      
+      setCurrentMeasurement(prev => prev ? {
+        ...prev,
+        endX: snappedPos.x,
+        endY: snappedPos.y
+      } : null)
+    } else if (isDraggingCharacter && draggedCharacter && onMoveCharacter) {
       // Handle character dragging - mouse position determines tile placement
       const worldPos = screenToWorld(event.clientX, event.clientY)
       
@@ -473,6 +668,31 @@ export function ActionMapViewer({ mapData, onMoveCharacter, selectedCharacterId 
   }
 
   const handleMouseUp = (event: React.MouseEvent) => {
+    if (isDrawingMeasurement && currentMeasurement && event.button === 2) {
+      // Finish measurement drawing
+      const dx = (currentMeasurement.endX - currentMeasurement.startX) / measurementSettings.gridSize
+      const dy = (currentMeasurement.endY - currentMeasurement.startY) / measurementSettings.gridSize
+      const gridDistance = Math.sqrt(dx * dx + dy * dy)
+      
+      // Only add if the line has some length
+      if (gridDistance > 0.1) {
+        const newLine = {
+          id: Date.now().toString(),
+          startX: currentMeasurement.startX,
+          startY: currentMeasurement.startY,
+          endX: currentMeasurement.endX,
+          endY: currentMeasurement.endY,
+          gridDistance
+        }
+        
+        setMeasurementLines(prev => [...prev, newLine])
+      }
+      
+      setIsDrawingMeasurement(false)
+      setCurrentMeasurement(null)
+      return
+    }
+    
     if (isDraggingCharacter && draggedCharacter) {
       // Finish character drag
       setIsDraggingCharacter(false)
@@ -603,6 +823,22 @@ export function ActionMapViewer({ mapData, onMoveCharacter, selectedCharacterId 
     }
   }, [handleWheel])
 
+  // Handle keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      // Backtick key to clear measurements
+      if (event.key === '`') {
+        event.preventDefault()
+        setMeasurementLines([])
+        setCurrentMeasurement(null)
+        setIsDrawingMeasurement(false)
+      }
+    }
+    
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [])
+
   // Re-render when viewport changes
   useEffect(() => {
     // Clear any pending render
@@ -638,12 +874,92 @@ export function ActionMapViewer({ mapData, onMoveCharacter, selectedCharacterId 
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
         onMouseLeave={handleMouseUp}
+        onContextMenu={(e) => e.preventDefault()} // Prevent right-click context menu
         style={{
           display: 'block',
           width: '100%',
           height: '100%'
         }}
       />
+
+      {/* Measurement settings panel */}
+      <MeasurementSettings
+        gridSize={measurementSettings.gridSize}
+        distancePerCell={measurementSettings.distancePerCell}
+        units={measurementSettings.units}
+        onGridSizeChange={(size) => setMeasurementSettings(prev => ({ ...prev, gridSize: size }))}
+        onDistancePerCellChange={(distance) => setMeasurementSettings(prev => ({ ...prev, distancePerCell: distance }))}
+        onUnitsChange={(units) => setMeasurementSettings(prev => ({ ...prev, units }))}
+      />
+      
+      {/* Measurement summary panel */}
+      {measurementLines.length > 0 && (
+        <div style={{
+          position: 'absolute',
+          top: '16px',
+          right: '16px',
+          backgroundColor: '#161b22',
+          border: '1px solid #30363d',
+          borderRadius: '8px',
+          padding: '12px',
+          fontSize: '14px',
+          color: '#e6edf3',
+          minWidth: '200px'
+        }}>
+          <h3 style={{
+            margin: '0 0 8px 0',
+            fontSize: '16px',
+            fontWeight: '600',
+            color: '#f0f6fc'
+          }}>Measurements</h3>
+          
+          <div style={{
+            maxHeight: '200px',
+            overflowY: 'auto',
+            marginBottom: '8px'
+          }}>
+            {measurementLines.map((line, index) => {
+              const calculatedDistance = line.gridDistance * measurementSettings.distancePerCell
+              return (
+                <div key={line.id} style={{
+                  fontSize: '12px',
+                  color: '#7d8590',
+                  marginBottom: '2px',
+                  display: 'flex',
+                  justifyContent: 'space-between'
+                }}>
+                  <span>Line {index + 1}:</span>
+                  <span style={{ color: '#ff6b35' }}>
+                    {calculatedDistance.toFixed(1)} {measurementSettings.units}
+                  </span>
+                </div>
+              )
+            })}
+          </div>
+          
+          <div style={{
+            borderTop: '1px solid #30363d',
+            paddingTop: '8px',
+            display: 'flex',
+            justifyContent: 'space-between',
+            fontWeight: '600'
+          }}>
+            <span>Total Distance:</span>
+            <span style={{ color: '#ff6b35' }}>
+              {measurementLines.reduce((sum, line) => sum + (line.gridDistance * measurementSettings.distancePerCell), 0).toFixed(1)} {measurementSettings.units}
+            </span>
+          </div>
+          
+          <div style={{
+            fontSize: '10px',
+            color: '#888',
+            marginTop: '8px',
+            textAlign: 'center'
+          }}>
+            Press ` to clear all
+          </div>
+        </div>
+      )}
       
       {/* Navigation controls overlay */}
       <div style={{
@@ -692,7 +1008,7 @@ export function ActionMapViewer({ mapData, onMoveCharacter, selectedCharacterId 
           textAlign: 'center',
           maxWidth: '120px'
         }}>
-          Drag to pan<br/>Scroll to zoom
+          Left: Move chars<br/>Middle: Pan<br/>Right: Measure<br/>Scroll: Zoom<br/>`: Clear measures
         </div>
       </div>
     </div>
