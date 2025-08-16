@@ -325,6 +325,7 @@ export function Action({}: ActionProps = {}) {
                 mapData={mapData} 
                 onMoveCharacter={handleMoveCharacter}
                 selectedCharacterId={selectedCharacter?.id}
+                measurementSettings={measurementSettings}
               />
             </div>
             

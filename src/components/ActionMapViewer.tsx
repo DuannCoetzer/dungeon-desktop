@@ -8,6 +8,11 @@ interface ActionMapViewerProps {
   mapData: MapData
   onMoveCharacter?: (characterId: string, x: number, y: number) => void
   selectedCharacterId?: string
+  measurementSettings?: {
+    gridSize: number
+    distancePerCell: number
+    units: string
+  }
 }
 
 interface ViewportState {
@@ -20,7 +25,7 @@ const TILE_SIZE = 32
 const MIN_ZOOM = 0.1
 const MAX_ZOOM = 5.0
 
-export function ActionMapViewer({ mapData, onMoveCharacter, selectedCharacterId }: ActionMapViewerProps) {
+export function ActionMapViewer({ mapData, onMoveCharacter, selectedCharacterId, measurementSettings: propMeasurementSettings }: ActionMapViewerProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const assetStore = useAssetStore()
@@ -37,12 +42,12 @@ export function ActionMapViewer({ mapData, onMoveCharacter, selectedCharacterId 
   const [lastMouse, setLastMouse] = useState({ x: 0, y: 0 })
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 })
 
-  // Measurement system state
-  const [measurementSettings, setMeasurementSettings] = useState({
+  // Use measurement settings from props, with fallback to defaults
+  const measurementSettings = propMeasurementSettings || {
     gridSize: TILE_SIZE,
     distancePerCell: 5,
     units: 'ft'
-  })
+  }
 
   // Measurement lines state - store grid distance instead of calculated distance
   const [measurementLines, setMeasurementLines] = useState<{
