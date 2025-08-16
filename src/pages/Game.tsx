@@ -11,6 +11,7 @@ import { AssetInstanceComponent } from '../components/AssetInstance'
 import { GenerationParametersPanel } from '../components/GenerationParametersPanel'
 import { FileOperationsPanel } from '../components/FileOperationsPanel'
 import { ToolSettingsPanel } from '../components/ToolSettingsPanel'
+import { ImageMapImporter } from '../components/ImageMapImporter'
 import { useAllAssets } from '../store/assetStore'
 import { preloadAllTileImages, renderTile } from '../utils/tileRenderer'
 import type { Palette } from '../store'
@@ -21,6 +22,9 @@ export default function Game() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const stageRef = useRef<HTMLElement | null>(null)
   const [, setDragTransform] = useState({ scale: 1, offsetX: 0, offsetY: 0 })
+  
+  // Image map importer state
+  const [isImageImporterOpen, setIsImageImporterOpen] = useState(false)
 
   // UI state from UI store
   const tool = useSelectedTool()
@@ -42,6 +46,13 @@ export default function Game() {
 
   // Camera transform state - exposed to track canvas transforms
   const [cameraTransform, setCameraTransform] = useState({ scale: 1, offsetX: 0, offsetY: 0 })
+  
+  // Handle image import completion
+  const handleImageImported = () => {
+    setIsImageImporterOpen(false)
+    // Trigger a canvas redraw to show the new map data
+    // The canvas will automatically pick up the updated map data from the store
+  }
 
 
   // Handle asset drop on canvas
@@ -458,6 +469,25 @@ export default function Game() {
       <div className="sidebar">
         <FileOperationsPanel />
         
+        {/* Image Import */}
+        <div className="toolbar-section">
+        <button
+            onClick={() => setIsImageImporterOpen(true)}
+            style={{
+              padding: '8px 16px',
+              background: '#4a5568',
+              border: '1px solid #1f2430',
+              borderRadius: '4px',
+              color: '#e6e6e6',
+              fontSize: '12px',
+              cursor: 'pointer',
+              width: '100%'
+            }}
+          >
+            📷 Import from Image
+          </button>
+        </div>
+        
         {/* Tools */}
         <div className="toolbar-section">
           <h3 className="toolbar-title">Tools</h3>
@@ -700,6 +730,14 @@ export default function Game() {
           })}
         </div>
       </div>
+      
+      {/* Image Map Importer Modal */}
+      {isImageImporterOpen && (
+        <ImageMapImporter
+          onClose={() => setIsImageImporterOpen(false)}
+          onImported={handleImageImported}
+        />
+      )}
     </div>
   )
 }

@@ -8,6 +8,7 @@ import {
   deleteAssetInstance as protocolDeleteAssetInstance,
   resetMap as protocolResetMap,
   getMapData,
+  setMapData as protocolSetMapData,
   type MapData
 } from './protocol'
 import { saveMapToFile as tauriSaveMap, loadMapFromFile as tauriLoadMap } from './services/tauri'
@@ -62,6 +63,7 @@ interface MapState {
   // File operations
   saveMapToFile: () => Promise<boolean>
   loadMapFromFile: () => Promise<boolean>
+  loadMapData: (mapData: MapData) => void
   
   reset: () => void
 }
@@ -192,6 +194,10 @@ export const useMapStore = create<MapState>((set, get) => {
         console.error('Error loading map:', error)
         return false
       }
+    },
+    
+    loadMapData: (mapData) => {
+      protocolSetMapData(mapData)
     },
     
     reset: () => {
