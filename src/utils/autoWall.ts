@@ -2,22 +2,39 @@ import { useMapStore } from '../mapStore'
 import { setTile, eraseTile } from '../protocol'
 import type { Palette, Layer } from '../store'
 import { getWallForFloor } from './wallSelection'
+import { useTileStore } from '../store/tileStore'
 
 // Helper to check if a tile is a floor tile
 export function isFloorTile(palette: Palette): boolean {
-  return palette === 'grass' || 
-         palette === 'floor-stone-rough' || 
-         palette === 'floor-stone-smooth' || 
-         palette === 'floor-wood-planks' || 
-         palette === 'floor-cobblestone'
+  // Check predefined floor tiles first
+  if (palette === 'grass' || 
+      palette === 'floor-stone-rough' || 
+      palette === 'floor-stone-smooth' || 
+      palette === 'floor-wood-planks' || 
+      palette === 'floor-cobblestone') {
+    return true
+  }
+  
+  // Check imported tiles from tile store
+  const tileStore = useTileStore.getState()
+  const tile = tileStore.getTileById(palette)
+  return tile?.category === 'floors'
 }
 
 // Helper to check if a tile is a wall tile
 export function isWallTile(palette: Palette): boolean {
-  return palette === 'wall' ||
-         palette === 'wall-brick' ||
-         palette === 'wall-stone' ||
-         palette === 'wall-wood'
+  // Check predefined wall tiles first
+  if (palette === 'wall' ||
+      palette === 'wall-brick' ||
+      palette === 'wall-stone' ||
+      palette === 'wall-wood') {
+    return true
+  }
+  
+  // Check imported tiles from tile store
+  const tileStore = useTileStore.getState()
+  const tile = tileStore.getTileById(palette)
+  return tile?.category === 'walls'
 }
 
 // Get tile at position (returns undefined if empty)
