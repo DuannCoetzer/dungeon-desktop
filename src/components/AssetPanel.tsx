@@ -3,9 +3,15 @@ import { useDrag } from 'react-dnd'
 import type { Asset } from '../store'
 import { useAssetStore, useAllAssets, useAssetLoading, useAssetError } from '../store/assetStore'
 import { isImportedAsset } from '../services/assetPersistence'
+import { useMapStore, useSelectedAssetForPlacement } from '../mapStore'
 
 // Individual draggable asset item
-function AssetItem({ asset, onDelete }: { asset: Asset; onDelete?: (assetId: string) => void }) {
+function AssetItem({ asset, onDelete, onSelect, isSelected }: { 
+  asset: Asset; 
+  onDelete?: (assetId: string) => void;
+  onSelect?: (assetId: string) => void;
+  isSelected?: boolean;
+}) {
   const [{ isDragging }, drag] = useDrag(() => ({
     type: 'asset',
     item: { asset },
@@ -21,15 +27,16 @@ function AssetItem({ asset, onDelete }: { asset: Asset; onDelete?: (assetId: str
     <div
       ref={drag as any}
       className="asset-item"
+      onClick={() => onSelect?.(asset.id)}
       style={{
         padding: '8px',
-        border: '1px solid #444',
+        border: isSelected ? '2px solid #7c8cff' : '1px solid #444',
         borderRadius: '4px',
-        cursor: 'grab',
+        cursor: 'pointer',
         opacity: isDragging ? 0.5 : 1,
         textAlign: 'center',
-        backgroundColor: '#1a1a1a',
-        transition: 'opacity 0.2s',
+        backgroundColor: isSelected ? '#2a2a3a' : '#1a1a1a',
+        transition: 'all 0.2s',
         position: 'relative',
       }}
       onMouseEnter={() => setShowDelete(!!canDelete)}
@@ -105,6 +112,10 @@ export function AssetPanel({}: AssetPanelProps = {}) {
   const loading = useAssetLoading()
   const error = useAssetError()
   const assetStore = useAssetStore()
+  
+  // Use map store for asset placement selection
+  const selectedAssetForPlacement = useSelectedAssetForPlacement()
+  const setSelectedAssetForPlacement = useMapStore(state => state.setSelectedAssetForPlacement)
   
   // Local UI state
   const [importStatus, setImportStatus] = useState<string | null>(null)
@@ -239,6 +250,15 @@ export function AssetPanel({}: AssetPanelProps = {}) {
     setShowDeleteConfirm(null)
   }
   
+  const handleSelectAsset = useCallback((assetId: string) => {
+    // Toggle selection - if already selected, deselect; otherwise select
+    if (selectedAssetForPlacement === assetId) {
+      setSelectedAssetForPlacement(null)
+    } else {
+      setSelectedAssetForPlacement(assetId)
+    }
+  }, [selectedAssetForPlacement, setSelectedAssetForPlacement])
+  
   // Helper function to compress images before storing
   const compressImage = (dataUrl: string, maxWidth: number, maxHeight: number, quality: number): Promise<string> => {
     return new Promise((resolve) => {
@@ -298,6 +318,25 @@ export function AssetPanel({}: AssetPanelProps = {}) {
   return (
     <div className="toolbar-section">
       <h3 className="toolbar-title">Assets</h3>
+      
+      {/* Selected asset for placement indicator */}
+      {selectedAssetForPlacement && (
+        <div style={{
+          marginBottom: '12px',
+          padding: '8px',
+          backgroundColor: '#2a4a2d',
+          border: '1px solid #4a7c4f',
+          borderRadius: '4px',
+          fontSize: '11px',
+          color: '#90ee90',
+          textAlign: 'center'
+        }}>
+          📌 Ready to place: <strong>{assets.find(a => a.id === selectedAssetForPlacement)?.name || 'Unknown Asset'}</strong>
+          <div style={{ fontSize: '10px', color: '#bbb', marginTop: '2px' }}>
+            Click on the map to place, or click another asset to change selection
+          </div>
+        </div>
+      )}
       
       {/* Import button */}
       <div style={{ marginBottom: '12px' }}>
@@ -669,7 +708,13 @@ export function AssetPanel({}: AssetPanelProps = {}) {
         {assets
           .filter(asset => asset.category !== 'characters') // Exclude characters category from Game page
           .map((asset) => (
-            <AssetItem key={asset.id} asset={asset} onDelete={handleDeleteAsset} />
+            <AssetItem 
+              key={asset.id} 
+              asset={asset} 
+              onDelete={handleDeleteAsset}
+              onSelect={handleSelectAsset}
+              isSelected={selectedAssetForPlacement === asset.id}
+            />
         ))}
       </div>
     </div>

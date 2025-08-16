@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react'
 import { useAssetStore } from '../store/assetStore'
+import { useTileStore } from '../store/tileStore'
 import { isImportedAsset } from '../services/assetPersistence'
 import type { Asset } from '../store'
+import { TileBrowser } from '../components/TileBrowser'
 import './AssetDesigner.css'
 
 interface AssetCategory {
@@ -22,6 +24,7 @@ const DEFAULT_CATEGORIES: AssetCategory[] = [
 
 export default function AssetDesigner() {
   const assetStore = useAssetStore()
+  const tileStore = useTileStore()
   const allAssets = useAssetStore(state => state.allAssets)
   const importedAssets = useAssetStore(state => state.importedAssets) 
   const defaultAssets = useAssetStore(state => state.defaultAssets)
@@ -32,12 +35,14 @@ export default function AssetDesigner() {
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
   const [showImportDialog, setShowImportDialog] = useState(false)
   const [editingAsset, setEditingAsset] = useState<Asset | null>(null)
+  const [activeTab, setActiveTab] = useState<'assets' | 'tiles'>('assets')
 
-  // Load assets on mount
+  // Load assets and tiles on mount
   useEffect(() => {
     const loadAssets = async () => {
       await assetStore.loadDefaultAssets()
       await assetStore.loadImportedAssets()
+      tileStore.loadDefaultTiles()
     }
     loadAssets()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
@@ -123,39 +128,76 @@ export default function AssetDesigner() {
     <div className="asset-designer">
       <div className="asset-designer-header">
         <div className="header-content">
-          <h1>Asset Designer</h1>
-          <p>Manage, organize, and edit your asset library</p>
+          <h1>Asset & Tile Manager</h1>
+          <p>Manage, organize, and edit your asset and tile library</p>
         </div>
         <div className="header-actions">
-          <button 
-            className="btn btn-primary"
-            onClick={() => setShowImportDialog(true)}
-          >
-            📁 Import Assets
-          </button>
+          <div className="tab-buttons" style={{ marginRight: '16px' }}>
+            <button 
+              className={`tab-btn ${activeTab === 'assets' ? 'active' : ''}`}
+              onClick={() => setActiveTab('assets')}
+              style={{
+                padding: '8px 16px',
+                background: activeTab === 'assets' ? '#4a5568' : '#2d3748',
+                border: '1px solid #1f2430',
+                borderRadius: '4px 0 0 4px',
+                color: '#e6e6e6',
+                fontSize: '12px',
+                cursor: 'pointer'
+              }}
+            >
+              Assets
+            </button>
+            <button 
+              className={`tab-btn ${activeTab === 'tiles' ? 'active' : ''}`}
+              onClick={() => setActiveTab('tiles')}
+              style={{
+                padding: '8px 16px',
+                background: activeTab === 'tiles' ? '#4a5568' : '#2d3748',
+                border: '1px solid #1f2430',
+                borderRadius: '0 4px 4px 0',
+                borderLeft: 'none',
+                color: '#e6e6e6',
+                fontSize: '12px',
+                cursor: 'pointer'
+              }}
+            >
+              Tiles
+            </button>
+          </div>
+          {activeTab === 'assets' && (
+            <button 
+              className="btn btn-primary"
+              onClick={() => setShowImportDialog(true)}
+            >
+              📁 Import Assets
+            </button>
+          )}
         </div>
       </div>
 
       <div className="asset-designer-content">
-        {/* Sidebar with filters and stats */}
-        <div className="asset-sidebar">
-          <div className="asset-stats">
-            <h3>Library Stats</h3>
-            <div className="stat-grid">
-              <div className="stat-item">
-                <span className="stat-value">{stats.total}</span>
-                <span className="stat-label">Total Assets</span>
+        {activeTab === 'assets' ? (
+          <>
+            {/* Sidebar with filters and stats */}
+            <div className="asset-sidebar">
+              <div className="asset-stats">
+                <h3>Library Stats</h3>
+                <div className="stat-grid">
+                  <div className="stat-item">
+                    <span className="stat-value">{stats.total}</span>
+                    <span className="stat-label">Total Assets</span>
+                  </div>
+                  <div className="stat-item">
+                    <span className="stat-value">{stats.imported}</span>
+                    <span className="stat-label">Imported</span>
+                  </div>
+                  <div className="stat-item">
+                    <span className="stat-value">{stats.default}</span>
+                    <span className="stat-label">Default</span>
+                  </div>
+                </div>
               </div>
-              <div className="stat-item">
-                <span className="stat-value">{stats.imported}</span>
-                <span className="stat-label">Imported</span>
-              </div>
-              <div className="stat-item">
-                <span className="stat-value">{stats.default}</span>
-                <span className="stat-label">Default</span>
-              </div>
-            </div>
-          </div>
 
           <div className="asset-filters">
             <h3>Categories</h3>
@@ -288,17 +330,27 @@ export default function AssetDesigner() {
           </div>
         </div>
 
-        {/* Asset details panel */}
-        {selectedAsset && (
-          <div className="asset-details">
-            <AssetDetailsPanel
-              asset={selectedAsset}
-              isEditing={editingAsset?.id === selectedAsset.id}
-              onEdit={() => handleAssetEdit(selectedAsset)}
-              onSave={handleAssetUpdate}
-              onCancel={() => setEditingAsset(null)}
-              onDelete={() => handleAssetDelete(selectedAsset.id)}
-            />
+            {/* Asset details panel */}
+            {selectedAsset && (
+              <div className="asset-details">
+                <AssetDetailsPanel
+                  asset={selectedAsset}
+                  isEditing={editingAsset?.id === selectedAsset.id}
+                  onEdit={() => handleAssetEdit(selectedAsset)}
+                  onSave={handleAssetUpdate}
+                  onCancel={() => setEditingAsset(null)}
+                  onDelete={() => handleAssetDelete(selectedAsset.id)}
+                />
+              </div>
+            )}
+          </>
+        ) : (
+          /* Tiles Tab Content */
+          <div className="tiles-content" style={{ padding: '20px', width: '100%' }}>
+            <div style={{ maxWidth: '400px', margin: '0 auto' }}>
+              <h2 style={{ marginBottom: '20px', color: '#e6e6e6' }}>Tile Library</h2>
+              <TileBrowser />
+            </div>
           </div>
         )}
       </div>
@@ -511,7 +563,7 @@ function ImportAssetsDialog({ onClose }: { onClose: () => void }) {
     return defaultGridSize // Fallback to default
   }
 
-  // Helper function to compress image
+  // Helper function to compress image while preserving transparency
   const compressImage = (file: File, maxWidth = 512, quality = 0.8): Promise<string> => {
     return new Promise((resolve, reject) => {
       const canvas = document.createElement('canvas')
@@ -538,9 +590,14 @@ function ImportAssetsDialog({ onClose }: { onClose: () => void }) {
           return
         }
         
-        // Draw and compress image
+        // Clear canvas to transparent
+        ctx.clearRect(0, 0, width, height)
+        
+        // Draw image preserving transparency
         ctx.drawImage(img, 0, 0, width, height)
-        const compressedDataUrl = canvas.toDataURL('image/jpeg', quality)
+        
+        // Use PNG format to preserve transparency
+        const compressedDataUrl = canvas.toDataURL('image/png')
         resolve(compressedDataUrl)
       }
       

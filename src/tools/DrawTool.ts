@@ -3,6 +3,8 @@ import { useMapStore } from '../mapStore'
 import { useUIStore } from '../uiStore'
 import { setTile } from '../protocol'
 import { enhancedSmartAutoPlaceWallsForTile } from '../utils/autoWall'
+import { useAssetStore } from '../store/assetStore'
+import type { AssetInstance } from '../store'
 
 export class DrawTool implements Tool {
   readonly name = 'draw'
@@ -37,7 +39,12 @@ export class DrawTool implements Tool {
       // Delete mode - erase tiles on the current layer
       state.eraseTile(context.tileX, context.tileY)
     } else {
-      this.drawTile(context)
+      // Check if an asset is selected for placement
+      if (state.selectedAssetForPlacement) {
+        this.placeAsset(context, state.selectedAssetForPlacement)
+      } else {
+        this.drawTile(context)
+      }
     }
   }
 
@@ -57,5 +64,46 @@ export class DrawTool implements Tool {
         uiState.autoWallSettings
       )
     }
+  }
+
+  private placeAsset(context: PointerEventContext, assetId: string): void {
+    const mapState = useMapStore.getState()
+    const assetStore = useAssetStore.getState()
+    
+    // Get the asset data
+    const asset = assetStore.getAssetById(assetId)
+    if (!asset) {
+      console.error('Asset not found:', assetId)
+      return
+    }
+    
+    // Check if an asset already exists at this position
+    const existingAsset = Object.values(mapState.mapData.assetInstances).find(
+      instance => 
+        Math.floor(instance.x / 32) === context.tileX && 
+        Math.floor(instance.y / 32) === context.tileY
+    )
+    
+    if (existingAsset) {
+      // Don't place overlapping assets
+      return
+    }
+    
+    // Create a new asset instance
+    const assetInstance: AssetInstance = {
+      id: `asset_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      assetId: assetId,
+      x: context.tileX * 32,
+      y: context.tileY * 32,
+      rotation: 0,
+      flipX: false,
+      flipY: false,
+      opacity: 1,
+      visible: true,
+      zIndex: 0
+    }
+    
+    // Add the asset instance to the map
+    mapState.addAssetInstance(assetInstance)
   }
 }

@@ -37,6 +37,9 @@ interface MapState {
   // Asset selection state
   selectedAssetInstances: string[]
   
+  // Asset placement state
+  selectedAssetForPlacement: string | null // Asset ID selected for placement
+  
   // Current editing context
   currentLayer: Layer
   selected: Palette
@@ -59,6 +62,7 @@ interface MapState {
   selectAssetInstance: (id: string) => void
   deselectAssetInstance: (id: string) => void
   clearAssetSelection: () => void
+  setSelectedAssetForPlacement: (assetId: string | null) => void
   
   // File operations
   saveMapToFile: () => Promise<boolean>
@@ -83,6 +87,7 @@ export const useMapStore = create<MapState>((set, get) => {
       assets: { visible: true, opacity: 1 },
     },
     selectedAssetInstances: [],
+    selectedAssetForPlacement: null,
     currentLayer: 'floor',
     selected: 'grass',
     
@@ -150,10 +155,13 @@ export const useMapStore = create<MapState>((set, get) => {
       } 
     })),
     
-    // Asset actions - using protocol functions
-    addAssetInstance: (assetInstance) => {
-      protocolAddAssetInstance(assetInstance)
-    },
+  // Asset placement selection
+  setSelectedAssetForPlacement: (assetId: string | null) => set({ selectedAssetForPlacement: assetId }),
+  
+  // Asset actions - using protocol functions
+  addAssetInstance: (assetInstance) => {
+    protocolAddAssetInstance(assetInstance)
+  },
     
     updateAssetInstance: (id, updates) => {
       protocolUpdateAssetInstance(id, updates)
@@ -211,6 +219,7 @@ export const useMapStore = create<MapState>((set, get) => {
           assets: { visible: true, opacity: 1 },
         },
         selectedAssetInstances: [],
+        selectedAssetForPlacement: null,
         currentLayer: 'floor',
         selected: 'grass',
       })
@@ -233,3 +242,4 @@ export const useLayerSettings = () => useMapStore(state => state.layerSettings)
 export const useSelectedPalette = () => useMapStore(state => state.selected)
 export const usePlayerPosition = () => useMapStore(state => state.player)
 export const useSelectedAssetInstances = () => useMapStore(state => state.selectedAssetInstances)
+export const useSelectedAssetForPlacement = () => useMapStore(state => state.selectedAssetForPlacement)

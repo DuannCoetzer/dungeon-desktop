@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { 
   IconErase,
   TileGrass, 
@@ -13,6 +13,7 @@ import {
 } from '../assets'
 import { useMapStore, useSelectedPalette } from '../mapStore'
 import { useUIStore, useSelectedTool, useBrushSettings, useAutoWallSettings } from '../uiStore'
+import { useTileStore } from '../store/tileStore'
 import type { Palette } from '../store'
 
 interface TileInfo {
@@ -55,7 +56,7 @@ export const ToolSettingsPanel: React.FC<ToolSettingsPanelProps> = ({ className 
   const autoWallSettings = useAutoWallSettings()
   const { setBrushSize, setBrushOpacity, toggleAutoWall, setAutoWallType, setAutoWallPlacement } = useUIStore()
   
-  // Group tiles by category
+  // Group tiles by category (using legacy palette for now)
   const floorTiles = TILE_PALETTE.filter(tile => tile.category === 'floors')
   const wallTiles = TILE_PALETTE.filter(tile => tile.category === 'walls')
   const specialTiles = TILE_PALETTE.filter(tile => tile.category === 'special')

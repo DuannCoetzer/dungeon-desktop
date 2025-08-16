@@ -3,6 +3,8 @@ import { useMapStore, useAssetInstances } from '../mapStore'
 import { useUIStore } from '../uiStore'
 import { getSavedMaps, exportMapData } from '../services/tauri'
 import { useAssetStore } from '../store/assetStore'
+import { getCachedTileImage, TILE_IMAGE_MAP } from '../utils/tileRenderer'
+import type { Palette } from '../store'
 
 export function FileOperationsPanel() {
   const [isLoading, setIsLoading] = useState(false)
@@ -136,9 +138,8 @@ export function FileOperationsPanel() {
       exportCanvas.width = mapWidth
       exportCanvas.height = mapHeight
       
-      // Set black background
-      exportCtx.fillStyle = '#000'
-      exportCtx.fillRect(0, 0, mapWidth, mapHeight)
+      // Set transparent background to preserve alpha
+      exportCtx.clearRect(0, 0, mapWidth, mapHeight)
       
       // Helper function to convert world coordinates to export canvas coordinates
       const worldToExport = (x: number, y: number) => ({
@@ -146,22 +147,50 @@ export function FileOperationsPanel() {
         sy: (y - minY) * TILE_SIZE * EXPORT_SCALE
       })
       
-      // Draw tiles
+      // Helper function to render a tile with proper image
+      const renderTileForExport = (ctx: CanvasRenderingContext2D, palette: Palette, x: number, y: number, size: number) => {
+        const img = getCachedTileImage(palette)
+        
+        if (img) {
+          ctx.drawImage(img, x, y, size, size)
+        } else {
+          // Fallback to color if image not loaded
+          let color = '#4a7c2a' // grass
+          switch (palette) {
+            case 'wall':
+            case 'wall-brick':
+            case 'wall-stone':
+            case 'wall-wood':
+              color = '#5a5a5a'
+              break
+            case 'floor-stone-rough':
+              color = '#666666'
+              break
+            case 'floor-stone-smooth':
+              color = '#777777'
+              break
+            case 'floor-wood-planks':
+              color = '#8b4513'
+              break
+            case 'floor-cobblestone':
+              color = '#696969'
+              break
+          }
+          ctx.fillStyle = color
+          ctx.fillRect(x, y, size, size)
+        }
+      }
+      
+      // Draw tiles using proper tile renderer
       const layerOrder: Array<keyof typeof tiles> = ['floor', 'walls', 'objects']
       for (const layer of layerOrder) {
         for (const k of Object.keys(tiles[layer])) {
           const [tx, ty] = k.split(',').map(Number)
           const { sx, sy } = worldToExport(tx, ty)
           const size = TILE_SIZE * EXPORT_SCALE
-          const type = tiles[layer][k]
+          const palette = tiles[layer][k] as Palette
           
-          let color = '#243219' // default floor color
-          if (layer === 'walls') color = '#3a3f4a'
-          else if (layer === 'objects') color = '#8a6f3d'
-          if (type === 'wall' && layer === 'floor') color = '#3a3f4a'
-          
-          exportCtx.fillStyle = color
-          exportCtx.fillRect(sx, sy, size, size)
+          renderTileForExport(exportCtx, palette, sx, sy, size)
         }
       }
       

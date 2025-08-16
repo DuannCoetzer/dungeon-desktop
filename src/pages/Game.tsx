@@ -12,7 +12,9 @@ import { GenerationParametersPanel } from '../components/GenerationParametersPan
 import { FileOperationsPanel } from '../components/FileOperationsPanel'
 import { ToolSettingsPanel } from '../components/ToolSettingsPanel'
 import { ImageMapImporter } from '../components/ImageMapImporter'
+import { TileBrowser } from '../components/TileBrowser'
 import { useAllAssets } from '../store/assetStore'
+import { useTileStore } from '../store/tileStore'
 import { preloadAllTileImages, renderTile } from '../utils/tileRenderer'
 import type { Palette } from '../store'
 
@@ -25,6 +27,9 @@ export default function Game() {
   
   // Image map importer state
   const [isImageImporterOpen, setIsImageImporterOpen] = useState(false)
+  
+  // Tile store
+  const tileStore = useTileStore()
 
   // UI state from UI store
   const tool = useSelectedTool()
@@ -129,17 +134,49 @@ export default function Game() {
   const toggleLayer = useMapStore(state => state.toggleLayer)
   const setLayerOpacity = useMapStore(state => state.setLayerOpacity)
 
-  // Preload tile images on component mount
+  // Preload tile images and initialize tile store on component mount
   useEffect(() => {
     preloadAllTileImages()
+    
+    // Initialize tile store with default tiles
+    tileStore.loadDefaultTiles()
   }, [])
 
   useEffect(() => {
     const canvas = canvasRef.current
     const stage = stageRef.current
     if (!canvas || !stage) return
-    const ctx = canvas.getContext('2d')!
+    
+    let ctx: CanvasRenderingContext2D
+    try {
+      // Try optimized context first
+      ctx = canvas.getContext('2d', { 
+        alpha: false, // Disable alpha for better performance
+        desynchronized: true, // Enable low-latency rendering
+        willReadFrequently: false // Optimize for writing, not reading
+      })!
+    } catch (error) {
+      // Fallback to basic context if optimized fails
+      console.warn('Optimized canvas context failed, using fallback:', error)
+      ctx = canvas.getContext('2d')!
+    }
+    
+    if (!ctx) {
+      console.error('Could not get canvas context')
+      return
+    }
+    
+    // Disable image smoothing for pixel-perfect rendering
     ctx.imageSmoothingEnabled = false
+    
+    // GPU acceleration hints (safe fallback)
+    try {
+      if ('webkitBackingStorePixelRatio' in ctx) {
+        (ctx as any).webkitBackingStorePixelRatio = 1
+      }
+    } catch (e) {
+      // Ignore if not supported
+    }
 
     // camera state for pan/zoom - use state directly instead of props
     let scale = 1
@@ -147,8 +184,20 @@ export default function Game() {
     let offsetY = 0
 
     const resize = () => {
-      canvas.width = stage.clientWidth
-      canvas.height = stage.clientHeight
+      const devicePixelRatio = window.devicePixelRatio || 1
+      const rect = stage.getBoundingClientRect()
+      
+      // Set actual size in memory (scaled for high-DPI displays)
+      canvas.width = rect.width * devicePixelRatio
+      canvas.height = rect.height * devicePixelRatio
+      
+      // Scale back down using CSS for proper display
+      canvas.style.width = rect.width + 'px'
+      canvas.style.height = rect.height + 'px'
+      
+      // Scale the context to match the device pixel ratio
+      ctx.scale(devicePixelRatio, devicePixelRatio)
+      
       scheduleDraw()
     }
 
@@ -163,53 +212,106 @@ export default function Game() {
     }
 
     const drawGrid = () => {
-      ctx.clearRect(0, 0, canvas.width, canvas.height)
+      // Use optimized clear for better GPU performance
+      const devicePixelRatio = window.devicePixelRatio || 1
+      const rect = stage.getBoundingClientRect()
+      ctx.clearRect(0, 0, rect.width, rect.height)
       ctx.fillStyle = '#000'
-      ctx.fillRect(0, 0, canvas.width, canvas.height)
+      ctx.fillRect(0, 0, rect.width, rect.height)
       
       // Only draw grid lines if grid is visible
       const { isGridVisible } = useUIStore.getState()
       if (isGridVisible) {
         ctx.strokeStyle = '#2a2a2a'
         ctx.lineWidth = 1
-        // visible tile bounds
+        
+        // Calculate visible bounds more efficiently
+        const rect = stage.getBoundingClientRect()
         const left = screenToTile(0, 0).x - 1
         const top = screenToTile(0, 0).y - 1
-        const right = screenToTile(canvas.width, canvas.height).x + 2
-        const bottom = screenToTile(canvas.width, canvas.height).y + 2
+        const right = screenToTile(rect.width, rect.height).x + 2
+        const bottom = screenToTile(rect.width, rect.height).y + 2
+        
+        // Use batch drawing for better GPU performance
+        ctx.beginPath()
         for (let x = left; x <= right; x++) {
           const { sx } = worldToScreen(x, 0)
-          ctx.beginPath(); ctx.moveTo(sx + 0.5, 0); ctx.lineTo(sx + 0.5, canvas.height); ctx.stroke()
+          ctx.moveTo(sx + 0.5, 0)
+          ctx.lineTo(sx + 0.5, rect.height)
         }
         for (let y = top; y <= bottom; y++) {
           const { sy } = worldToScreen(0, y)
-          ctx.beginPath(); ctx.moveTo(0, sy + 0.5); ctx.lineTo(canvas.width, sy + 0.5); ctx.stroke()
+          ctx.moveTo(0, sy + 0.5)
+          ctx.lineTo(rect.width, sy + 0.5)
         }
+        ctx.stroke()
       }
     }
 
     const drawTiles = () => {
       const { tiles } = useMapStore.getState().mapData
+      const layerSettings = useMapStore.getState().layerSettings
       const order: Array<keyof typeof tiles> = ['floor', 'walls', 'objects']
-      for (const layer of order) {
-        const settings = useMapStore.getState().layerSettings[layer]
+      
+      // Calculate viewport bounds for culling tiles outside view
+      const rect = stage.getBoundingClientRect()
+      const padding = 2 // Extra tiles on each side to prevent pop-in
+      const leftBound = screenToTile(-TILE, -TILE).x - padding
+      const topBound = screenToTile(-TILE, -TILE).y - padding  
+      const rightBound = screenToTile(rect.width + TILE, rect.height + TILE).x + padding
+      const bottomBound = screenToTile(rect.width + TILE, rect.height + TILE).y + padding
+      
+      // Optimization: Create a map of positions to their topmost visible tile
+      const tilePositions = new Map<string, { layer: keyof typeof tiles, tileType: Palette, opacity: number }>()
+      
+      // Process layers in reverse order (topmost first) to find the topmost visible tile per position
+      for (let i = order.length - 1; i >= 0; i--) {
+        const layer = order[i]
+        const settings = layerSettings[layer]
         if (!settings.visible) continue
-        const prevAlpha = ctx.globalAlpha
-        ctx.globalAlpha = settings.opacity
+        
         for (const k of Object.keys(tiles[layer])) {
           const [tx, ty] = k.split(',').map(Number)
-          const { sx, sy } = worldToScreen(tx, ty)
-          const size = Math.ceil(TILE * scale)
-          const tileType = tiles[layer][k] as Palette
           
-          // Use the new tile renderer with image support
-          renderTile(ctx, tileType, sx, sy, size)
+          // Viewport culling: skip tiles outside visible bounds
+          if (tx < leftBound || tx > rightBound || ty < topBound || ty > bottomBound) {
+            continue
+          }
+          
+          // Only store if we haven't seen this position yet (topmost visible tile)
+          if (!tilePositions.has(k)) {
+            tilePositions.set(k, {
+              layer,
+              tileType: tiles[layer][k] as Palette,
+              opacity: settings.opacity
+            })
+          }
         }
+      }
+      
+      // Render only the topmost visible tile for each position
+      for (const [posKey, tileData] of tilePositions) {
+        const [tx, ty] = posKey.split(',').map(Number)
+        const { sx, sy } = worldToScreen(tx, ty)
+        const size = Math.ceil(TILE * scale)
+        
+        // Apply layer opacity
+        const prevAlpha = ctx.globalAlpha
+        ctx.globalAlpha = tileData.opacity
+        
+        // Use the new tile renderer with image support
+        renderTile(ctx, tileData.tileType, sx, sy, size)
+        
         ctx.globalAlpha = prevAlpha
       }
     }
 
     let raf = 0
+    let lastDrawTime = 0
+    let debounceTimeout = 0
+    const maxFPS = 60 // Cap at 60 FPS for better performance
+    const debounceDelay = 8 // 8ms debounce for batching tile operations
+    
     const drawAll = () => { 
       drawGrid(); 
       drawTiles();
@@ -225,9 +327,29 @@ export default function Game() {
       }
       currentTool.renderPreview(renderContext)
     }
+    
     const scheduleDraw = () => {
       if (raf) cancelAnimationFrame(raf)
-      raf = requestAnimationFrame(() => drawAll())
+      
+      raf = requestAnimationFrame((currentTime) => {
+        // Throttle drawing to maxFPS for better performance
+        if (currentTime - lastDrawTime >= (1000 / maxFPS)) {
+          drawAll()
+          lastDrawTime = currentTime
+        } else {
+          // Re-schedule if we're drawing too fast
+          scheduleDraw()
+        }
+      })
+    }
+    
+    // Debounced draw for batching multiple operations
+    const debouncedDraw = () => {
+      if (debounceTimeout) clearTimeout(debounceTimeout)
+      
+      debounceTimeout = window.setTimeout(() => {
+        scheduleDraw()
+      }, debounceDelay)
     }
 
     // Handle input
@@ -272,7 +394,7 @@ export default function Game() {
       
       const currentTool = toolManager.getTool(useUIStore.getState().selectedTool)
       currentTool.onDown(context)
-      scheduleDraw() // Trigger redraw after tool operation
+      debouncedDraw() // Use debounced draw for better performance
     }
 
     const handleMove = (px: number, py: number, event?: PointerEvent | MouseEvent) => {
@@ -294,7 +416,7 @@ export default function Game() {
       
       const currentTool = toolManager.getTool(useUIStore.getState().selectedTool)
       currentTool.onMove(context)
-      scheduleDraw() // Trigger redraw after tool operation
+      debouncedDraw() // Use debounced draw for better performance
     }
 
     const handleUp = (px: number, py: number, event?: PointerEvent | MouseEvent) => {
@@ -316,7 +438,7 @@ export default function Game() {
       
       const currentTool = toolManager.getTool(useUIStore.getState().selectedTool)
       currentTool.onUp(context)
-      scheduleDraw() // Trigger redraw after tool operation
+      scheduleDraw() // Use immediate draw on mouse up to ensure final state is rendered
     }
 
     const handleWheel = (event: WheelEvent) => {
@@ -648,6 +770,12 @@ export default function Game() {
         </div>
 
         <ToolSettingsPanel />
+        
+        {/* Tile Browser */}
+        <div className="toolbar-section">
+          <h3 className="toolbar-title">Tiles</h3>
+          <TileBrowser />
+        </div>
 
         {/* Layers */}
         <div className="toolbar-section">
