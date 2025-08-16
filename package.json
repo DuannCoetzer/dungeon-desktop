@@ -7,7 +7,15 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "tauri:dev": "tauri dev",
+    "tauri:build": "tauri build",
+    "tauri:build:debug": "tauri build --debug",
+    "build:all": "npm run build && npm run tauri:build",
+    "build:debug": "npm run build && npm run tauri:build:debug",
+    "clean": "rimraf dist build src-tauri/target",
+    "build:clean": "npm run clean && npm run build:all",
+    "release": "npm run clean && npm run lint && npm run build:all"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.7.0",
@@ -32,6 +40,7 @@
     "eslint-plugin-react-hooks": "^5.2.0",
     "eslint-plugin-react-refresh": "^0.4.20",
     "globals": "^16.3.0",
+    "rimraf": "^6.0.1",
     "typescript": "~5.8.3",
     "typescript-eslint": "^8.39.0",
     "vite": "^7.1.0"

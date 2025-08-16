@@ -12,6 +12,18 @@ dist
 dist-ssr
 *.local
 
+# Build outputs
+build/
+src-tauri/target/
+src-tauri/Cargo.lock
+*.app
+*.dmg
+*.deb
+*.rpm
+*.msi
+*.exe
+*.AppImage
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
