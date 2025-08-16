@@ -1,6 +1,8 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react'
 import type { MapData } from '../protocol'
 import { useAssetStore } from '../store/assetStore'
+import { renderTile, preloadAllTileImages } from '../utils/tileRenderer'
+import type { Palette } from '../store'
 
 interface ActionMapViewerProps {
   mapData: MapData
@@ -110,24 +112,29 @@ export function ActionMapViewer({ mapData, onMoveCharacter, selectedCharacterId 
       if (mapData.tiles.floor) {
         for (const [key, tileType] of Object.entries(mapData.tiles.floor)) {
           const [x, y] = key.split(',').map(Number)
+          const size = Math.ceil(TILE_SIZE * viewport.scale)
           
-          ctx.fillStyle = getTileColor(tileType as string)
-          ctx.fillRect(
+          // Use the proper tile renderer with textures
+          const rendered = renderTile(
+            ctx,
+            tileType as Palette,
             x * TILE_SIZE,
             y * TILE_SIZE,
-            TILE_SIZE,
             TILE_SIZE
           )
           
-          // Add subtle border
-          ctx.strokeStyle = '#374151'
-          ctx.lineWidth = 1 / viewport.scale
-          ctx.strokeRect(
-            x * TILE_SIZE,
-            y * TILE_SIZE,
-            TILE_SIZE,
-            TILE_SIZE
-          )
+          // If image didn't render (not loaded), it falls back to color automatically
+          if (!rendered) {
+            // Add subtle border for fallback color tiles
+            ctx.strokeStyle = '#374151'
+            ctx.lineWidth = 1 / viewport.scale
+            ctx.strokeRect(
+              x * TILE_SIZE,
+              y * TILE_SIZE,
+              TILE_SIZE,
+              TILE_SIZE
+            )
+          }
         }
       }
       
@@ -162,23 +169,27 @@ export function ActionMapViewer({ mapData, onMoveCharacter, selectedCharacterId 
         for (const [key, tileType] of Object.entries(mapData.tiles.walls)) {
           const [x, y] = key.split(',').map(Number)
           
-          ctx.fillStyle = getTileColor(tileType as string)
-          ctx.fillRect(
+          // Use the proper tile renderer with textures
+          const rendered = renderTile(
+            ctx,
+            tileType as Palette,
             x * TILE_SIZE,
             y * TILE_SIZE,
-            TILE_SIZE,
             TILE_SIZE
           )
           
-          // Add wall border
-          ctx.strokeStyle = '#1f2937'
-          ctx.lineWidth = 2 / viewport.scale
-          ctx.strokeRect(
-            x * TILE_SIZE,
-            y * TILE_SIZE,
-            TILE_SIZE,
-            TILE_SIZE
-          )
+          // If image didn't render (not loaded), it falls back to color automatically
+          if (!rendered) {
+            // Add wall border for fallback color tiles
+            ctx.strokeStyle = '#1f2937'
+            ctx.lineWidth = 2 / viewport.scale
+            ctx.strokeRect(
+              x * TILE_SIZE,
+              y * TILE_SIZE,
+              TILE_SIZE,
+              TILE_SIZE
+            )
+          }
         }
       }
       
@@ -891,6 +902,13 @@ export function ActionMapViewer({ mapData, onMoveCharacter, selectedCharacterId 
     
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [])
+
+  // Preload tile images on component mount
+  useEffect(() => {
+    preloadAllTileImages().catch(err => {
+      console.warn('Failed to preload some tile images:', err)
+    })
   }, [])
 
   // Re-render when viewport changes
