@@ -17,6 +17,7 @@ import { useAllAssets } from '../store/assetStore'
 import { useTileStore } from '../store/tileStore'
 import { preloadAllTileImages, renderTile } from '../utils/tileRenderer'
 import type { Palette } from '../store'
+import { About } from '../components/About'
 
 const TILE = 32
 
@@ -27,6 +28,7 @@ export default function Game() {
   
   // Image map importer state
   const [isImageImporterOpen, setIsImageImporterOpen] = useState(false)
+  const [isAboutOpen, setIsAboutOpen] = useState(false)
   
   // Tile store
   const tileStore = useTileStore()
@@ -851,6 +853,34 @@ export default function Game() {
 
         <AssetPanel />
         <GenerationParametersPanel />
+        
+        {/* Studio Cosmic North Credits */}
+        <div className="toolbar-section">
+          <button
+            onClick={() => setIsAboutOpen(true)}
+            style={{
+              padding: '8px 16px',
+              background: '#2d3748',
+              border: '1px solid #4a5568',
+              borderRadius: '4px',
+              color: '#e6e6e6',
+              fontSize: '12px',
+              cursor: 'pointer',
+              width: '100%',
+              fontWeight: '500',
+              transition: 'background-color 0.2s'
+            }}
+            onMouseOver={(e) => {
+              e.currentTarget.style.backgroundColor = '#4a5568'
+            }}
+            onMouseOut={(e) => {
+              e.currentTarget.style.backgroundColor = '#2d3748'
+            }}
+            title="About Dungeon Desktop and Studio Cosmic North"
+          >
+            🌌 About & Credits
+          </button>
+        </div>
       </div>
 
       {/* Canvas */}
@@ -896,6 +926,11 @@ export default function Game() {
           onClose={() => setIsImageImporterOpen(false)}
           onImported={handleImageImported}
         />
+      )}
+      
+      {/* About Modal */}
+      {isAboutOpen && (
+        <About onClose={() => setIsAboutOpen(false)} />
       )}
     </div>
   )

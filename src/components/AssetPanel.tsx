@@ -712,7 +712,7 @@ export function AssetPanel({}: AssetPanelProps = {}) {
         }}
       >
         {assets
-          .filter(asset => asset.category !== 'characters') // Exclude characters category from Game page
+          .filter(asset => asset.category !== 'characters') // Exclude characters category from Map Builder page
           .map((asset) => (
             <AssetItem 
               key={asset.id} 

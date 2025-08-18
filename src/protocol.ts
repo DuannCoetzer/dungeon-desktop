@@ -23,11 +23,10 @@ export interface CharacterToken {
 export interface MapData {
   tiles: Record<Layer, TileMap>
   assetInstances: AssetInstance[]
-  characters: CharacterToken[]
+  characters?: CharacterToken[] // Make optional for backward compatibility
   version: string
-  id?: string
-  createdAt?: string
-  updatedAt?: string
+  createdAt: string
+  updatedAt: string
 }
 
 export interface LayerSettings {

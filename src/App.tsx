@@ -18,8 +18,8 @@ function App() {
           </div>
           <nav className="top-nav">
             <Link to="/" className="nav-link">Home</Link>
-            <Link to="/game" className="nav-link">Game</Link>
-            <Link to="/action" className="nav-link">Action</Link>
+            <Link to="/map-builder" className="nav-link">Map Builder</Link>
+            <Link to="/dm-game" className="nav-link">DM Game</Link>
             <Link to="/assets" className="nav-link">Assets</Link>
           </nav>
         </header>
@@ -27,8 +27,8 @@ function App() {
         <div className="app-content">
           <Routes>
             <Route path="/" element={<Home />} />
-            <Route path="/game" element={<Game />} />
-            <Route path="/action" element={<Action />} />
+            <Route path="/map-builder" element={<Game />} />
+            <Route path="/dm-game" element={<Action />} />
             <Route path="/assets" element={<AssetDesigner />} />
           </Routes>
         </div>

@@ -277,9 +277,9 @@ export function FileOperationsPanel() {
       document.body.removeChild(link)
       URL.revokeObjectURL(url)
       
-      setLastOperationStatus('Map exported for Action Mode!')
+      setLastOperationStatus('Map exported for DM Game!')
     } catch (error) {
-      console.error('Action Mode export failed:', error)
+      console.error('DM Game export failed:', error)
       setLastOperationStatus('Export failed.')
     } finally {
       setIsLoading(false)
@@ -320,13 +320,13 @@ export function FileOperationsPanel() {
           className="tool-button" 
           onClick={handleExportForAction}
           disabled={isLoading}
-          title="Export map as JSON for Action Mode viewing"
+          title="Export map as JSON for DM Game viewing"
           style={{
             backgroundColor: '#2d4a2d',
             border: '1px solid #4a7c59'
           }}
         >
-          🎭 Export for Action {isLoading ? '...' : ''}
+          🎭 Export for DM Game {isLoading ? '...' : ''}
         </button>
         
         {isDevelopmentMode && (

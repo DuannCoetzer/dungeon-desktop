@@ -426,7 +426,7 @@ export function GenerationParametersPanel() {
         />
 
         {/* Advanced Parameters */}
-        <div style={{ borderTop: '1px solid #22262e', paddingTop: 12, marginTop: 8 }}>
+        <div style={{ borderTop: '1px solid #22262e', paddingTop: 12, marginTop: 8, display: 'none' }}>
           <SliderControl
             label="Noise Scale"
             value={params.noiseScale}

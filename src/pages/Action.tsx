@@ -187,7 +187,7 @@ export function Action({}: ActionProps = {}) {
                 margin: '0 0 16px 0',
                 color: '#f0f6fc'
               }}>
-                Welcome to Action Mode
+                Welcome to DM Game
               </h2>
               
               <p style={{
@@ -196,7 +196,7 @@ export function Action({}: ActionProps = {}) {
                 marginBottom: '32px',
                 lineHeight: 1.6
               }}>
-                Import and explore dungeon maps created in the Game page. 
+                Import and explore dungeon maps created in the Map Builder page.
                 Navigate through your dungeons in read-only mode, perfect for 
                 players and DMs who want to explore without editing.
               </p>
