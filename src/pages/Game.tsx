@@ -192,6 +192,41 @@ export default function Game() {
       // Ignore if not supported
     }
 
+    // Create parchment pattern once and cache it
+    let parchmentPattern: CanvasPattern | null = null
+    const createParchmentPattern = () => {
+      if (parchmentPattern) return parchmentPattern // Return cached pattern
+      
+      try {
+        // Create pattern canvas with simple noise like DM game
+        const patternCanvas = document.createElement('canvas')
+        patternCanvas.width = 50
+        patternCanvas.height = 50
+        const patternCtx = patternCanvas.getContext('2d')
+        if (!patternCtx) return null
+        
+        // Create a subtle noise pattern for parchment texture
+        const imageData = patternCtx.createImageData(50, 50)
+        const data = imageData.data
+        
+        for (let i = 0; i < data.length; i += 4) {
+          const noise = Math.random() * 30 - 15
+          const baseColor = 240 + noise
+          data[i] = Math.max(220, Math.min(255, baseColor - 5))     // R
+          data[i + 1] = Math.max(220, Math.min(255, baseColor - 15))  // G
+          data[i + 2] = Math.max(220, Math.min(255, baseColor - 40))  // B
+          data[i + 3] = 255 // A
+        }
+        
+        patternCtx.putImageData(imageData, 0, 0)
+        parchmentPattern = ctx.createPattern(patternCanvas, 'repeat')
+        return parchmentPattern
+      } catch (error) {
+        console.error('Error creating parchment pattern:', error)
+        return null
+      }
+    }
+
     // camera state for pan/zoom - use state directly instead of props
     let scale = 1
     let offsetX = 0
@@ -230,13 +265,22 @@ export default function Game() {
       const devicePixelRatio = window.devicePixelRatio || 1
       const rect = stage.getBoundingClientRect()
       ctx.clearRect(0, 0, rect.width, rect.height)
-      ctx.fillStyle = '#000'
+      
+      // Apply parchment background - first solid color, then pattern
+      ctx.fillStyle = '#fffef0'
       ctx.fillRect(0, 0, rect.width, rect.height)
+      
+      // Apply cached parchment texture pattern
+      const pattern = createParchmentPattern()
+      if (pattern) {
+        ctx.fillStyle = pattern
+        ctx.fillRect(0, 0, rect.width, rect.height)
+      }
       
       // Only draw grid lines if grid is visible
       const { isGridVisible } = useUIStore.getState()
       if (isGridVisible) {
-        ctx.strokeStyle = '#2a2a2a'
+        ctx.strokeStyle = '#c4a882'
         ctx.lineWidth = 1
         
         // Calculate visible bounds more efficiently
@@ -472,6 +516,7 @@ export default function Game() {
     }
 
     // Mouse events
+    
     let isDragging = false
     let lastX = 0, lastY = 0
     let dragButton = -1 // Track which button initiated drag
