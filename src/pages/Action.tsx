@@ -1,45 +1,58 @@
 import React, { useState, useRef, useEffect } from 'react'
-import { deserializeMap, setMapData, getMapData, subscribeToMapChanges, addCharacter, updateCharacter, deleteCharacter, moveCharacter, getCharacters } from '../protocol'
 import { ActionMapViewer } from '../components/ActionMapViewer'
 import { CharacterPanel } from '../components/CharacterPanel'
 import { MeasurementSettings } from '../components/MeasurementSettings'
 import type { MapData, CharacterToken } from '../protocol'
 import { useAssetStore } from '../store/assetStore'
+import { useDMGameStore, useDMGameMapData, useDMGameCharacters, useDMGameSelectedCharacter, useDMGameSession } from '../store/dmGameStore'
+import { dmSubscribeToMapChanges, dmDeserializeMap, dmSetMapData, dmAddCharacter, dmUpdateCharacter, dmDeleteCharacter } from '../dmGameProtocol'
 
 interface ActionProps {}
 
 export function Action({}: ActionProps = {}) {
-  const [mapData, setLocalMapData] = useState<MapData | null>(null)
+  // Use persistent DM Game store instead of local state
+  const dmGameStore = useDMGameStore()
+  const mapData = useDMGameMapData()
+  const characters = useDMGameCharacters()
+  const selectedCharacter = useDMGameSelectedCharacter()
+  const hasActiveSession = useDMGameSession()
+  
+  // Local UI state for loading/errors (these don't need persistence)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [mapInfo, setMapInfo] = useState<{
-    name: string
-    createdAt?: string
-    updatedAt?: string
-  } | null>(null)
-  const [selectedCharacter, setSelectedCharacter] = useState<CharacterToken | null>(null)
-  const [characters, setCharacters] = useState<CharacterToken[]>([])
-  const [isCharacterPanelCollapsed, setIsCharacterPanelCollapsed] = useState(false)
-  const [isInfoPanelCollapsed, setIsInfoPanelCollapsed] = useState(false)
-  
-  // Measurement settings state
-  const [measurementSettings, setMeasurementSettings] = useState({
-    gridSize: 32, // TILE_SIZE from ActionMapViewer
-    distancePerCell: 5,
-    units: 'ft'
-  })
   
   const fileInputRef = useRef<HTMLInputElement>(null)
   const assetStore = useAssetStore()
 
-  // Subscribe to map data changes
+  // Subscribe to DM Game isolated map data changes
   useEffect(() => {
-    const unsubscribe = subscribeToMapChanges((newMapData) => {
-      setLocalMapData(newMapData)
-      setCharacters(newMapData.characters || [])
+    const unsubscribe = dmSubscribeToMapChanges((newMapData) => {
+      dmGameStore.setMapData(newMapData)
+      dmGameStore.setCharacters(newMapData.characters || [])
     })
     
     return unsubscribe
+  }, [dmGameStore])
+  
+  // Restore session on mount if there's an active session
+  useEffect(() => {
+    if (hasActiveSession && mapData) {
+      // Session exists, sync it with the isolated protocol
+      dmSetMapData(mapData)
+      console.log('✅ DM Game session restored from persistent storage:', {
+        mapName: dmGameStore.mapInfo?.name,
+        hasMap: !!mapData,
+        charactersCount: characters.length,
+        tilesCount: {
+          floor: Object.keys(mapData.tiles?.floor || {}).length,
+          walls: Object.keys(mapData.tiles?.walls || {}).length,
+          objects: Object.keys(mapData.tiles?.objects || {}).length
+        },
+        assetsCount: mapData.assetInstances?.length || 0
+      })
+    } else {
+      console.log('🔄 DM Game component mounted - no active session to restore')
+    }
   }, [])
 
   // Load assets on component mount (needed for asset rendering)
@@ -51,7 +64,7 @@ export function Action({}: ActionProps = {}) {
     loadAssets()
   }, [])
 
-  // Character management handlers
+  // Character management handlers - now using isolated DM Game protocol
   const handleAddCharacter = (character: Omit<CharacterToken, 'id' | 'createdAt' | 'updatedAt'>) => {
     const newCharacter: CharacterToken = {
       ...character,
@@ -59,26 +72,26 @@ export function Action({}: ActionProps = {}) {
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     }
-    addCharacter(newCharacter)
+    dmAddCharacter(newCharacter)
   }
 
   const handleUpdateCharacter = (id: string, updates: Partial<CharacterToken>) => {
-    updateCharacter(id, updates)
+    dmUpdateCharacter(id, updates)
   }
 
   const handleMoveCharacter = (characterId: string, x: number, y: number) => {
-    updateCharacter(characterId, { x, y })
+    dmUpdateCharacter(characterId, { x, y })
   }
 
   const handleDeleteCharacter = (id: string) => {
     if (selectedCharacter?.id === id) {
-      setSelectedCharacter(null)
+      dmGameStore.setSelectedCharacter(null)
     }
-    deleteCharacter(id)
+    dmDeleteCharacter(id)
   }
 
   const handleSelectCharacter = (character: CharacterToken | null) => {
-    setSelectedCharacter(character)
+    dmGameStore.setSelectedCharacter(character?.id || null)
   }
 
   const handleImportMap = () => {
@@ -109,20 +122,22 @@ export function Action({}: ActionProps = {}) {
         return
       }
 
-      // Use the protocol to deserialize and validate the map data
-      const success = deserializeMap(text)
+      // Use the isolated DM Game protocol to deserialize and validate the map data
+      const success = dmDeserializeMap(text)
       if (!success) {
         setError('Failed to load map data')
         setIsLoading(false)
         return
       }
 
-      // Map is already loaded into protocol via deserializeMap
-      setMapInfo({
+      // Map is loaded into isolated DM Game protocol, update store
+      const mapInfo = {
         name: file.name.replace('.json', ''),
         createdAt: data.createdAt,
         updatedAt: data.updatedAt
-      })
+      }
+      dmGameStore.setMapInfo(mapInfo)
+      dmGameStore.setSessionActive(true)
       
       setIsLoading(false)
     } catch (err) {
@@ -135,8 +150,7 @@ export function Action({}: ActionProps = {}) {
   }
 
   const handleCloseMap = () => {
-    setMapData(null) // Use protocol function to clear map data
-    setMapInfo(null)
+    dmGameStore.clearSession() // Clear the persistent DM Game session
     setError(null)
   }
 
@@ -243,7 +257,7 @@ export function Action({}: ActionProps = {}) {
           <div style={{ flex: 1, display: 'flex' }}>
             {/* Character Panel */}
             <div style={{
-              width: isCharacterPanelCollapsed ? '60px' : '320px',
+              width: dmGameStore.isCharacterPanelCollapsed ? '60px' : '320px',
               backgroundColor: '#0d1117',
               borderRight: '1px solid #30363d',
               padding: '16px',
@@ -253,11 +267,11 @@ export function Action({}: ActionProps = {}) {
               {/* Collapse toggle button */}
               <div style={{
                 display: 'flex',
-                justifyContent: isCharacterPanelCollapsed ? 'center' : 'space-between',
+                justifyContent: dmGameStore.isCharacterPanelCollapsed ? 'center' : 'space-between',
                 alignItems: 'center',
-                marginBottom: isCharacterPanelCollapsed ? '0' : '16px'
+                marginBottom: dmGameStore.isCharacterPanelCollapsed ? '0' : '16px'
               }}>
-                {!isCharacterPanelCollapsed && (
+                {!dmGameStore.isCharacterPanelCollapsed && (
                   <h2 style={{
                     margin: '0',
                     fontSize: '18px',
@@ -269,7 +283,7 @@ export function Action({}: ActionProps = {}) {
                 )}
                 
                 <button
-                  onClick={() => setIsCharacterPanelCollapsed(!isCharacterPanelCollapsed)}
+                  onClick={() => dmGameStore.setCharacterPanelCollapsed(!dmGameStore.isCharacterPanelCollapsed)}
                   style={{
                     background: 'none',
                     border: '1px solid #30363d',
@@ -284,13 +298,13 @@ export function Action({}: ActionProps = {}) {
                     width: '28px',
                     height: '28px'
                   }}
-                  title={isCharacterPanelCollapsed ? "Expand character panel" : "Collapse character panel"}
+                  title={dmGameStore.isCharacterPanelCollapsed ? "Expand character panel" : "Collapse character panel"}
                 >
-                  {isCharacterPanelCollapsed ? '▶' : '◀'}
+                  {dmGameStore.isCharacterPanelCollapsed ? '▶' : '◀'}
                 </button>
               </div>
               
-              {!isCharacterPanelCollapsed && (
+              {!dmGameStore.isCharacterPanelCollapsed && (
                 <>
                   <CharacterPanel
                     characters={characters}
@@ -305,12 +319,12 @@ export function Action({}: ActionProps = {}) {
                   {mapData && (Object.keys(mapData.tiles?.floor || {}).length > 0 || Object.keys(mapData.tiles?.walls || {}).length > 0) && (
                     <div style={{ marginTop: '16px' }}>
                       <MeasurementSettings
-                        gridSize={measurementSettings.gridSize}
-                        distancePerCell={measurementSettings.distancePerCell}
-                        units={measurementSettings.units}
-                        onGridSizeChange={(size) => setMeasurementSettings(prev => ({ ...prev, gridSize: size }))}
-                        onDistancePerCellChange={(distance) => setMeasurementSettings(prev => ({ ...prev, distancePerCell: distance }))}
-                        onUnitsChange={(units) => setMeasurementSettings(prev => ({ ...prev, units }))}
+                        gridSize={dmGameStore.measurementSettings.gridSize}
+                        distancePerCell={dmGameStore.measurementSettings.distancePerCell}
+                        units={dmGameStore.measurementSettings.units}
+                        onGridSizeChange={(size) => dmGameStore.setMeasurementSettings({ ...dmGameStore.measurementSettings, gridSize: size })}
+                        onDistancePerCellChange={(distance) => dmGameStore.setMeasurementSettings({ ...dmGameStore.measurementSettings, distancePerCell: distance })}
+                        onUnitsChange={(units) => dmGameStore.setMeasurementSettings({ ...dmGameStore.measurementSettings, units })}
                       />
                     </div>
                   )}
@@ -325,13 +339,13 @@ export function Action({}: ActionProps = {}) {
                 mapData={mapData} 
                 onMoveCharacter={handleMoveCharacter}
                 selectedCharacterId={selectedCharacter?.id}
-                measurementSettings={measurementSettings}
+                measurementSettings={dmGameStore.measurementSettings}
               />
             </div>
             
             {/* Right Info Panel */}
             <div style={{
-              width: isInfoPanelCollapsed ? '60px' : '320px',
+              width: dmGameStore.isInfoPanelCollapsed ? '60px' : '320px',
               backgroundColor: '#0d1117',
               borderLeft: '1px solid #30363d',
               padding: '16px',
@@ -341,11 +355,11 @@ export function Action({}: ActionProps = {}) {
               {/* Info Panel Header */}
               <div style={{
                 display: 'flex',
-                justifyContent: isInfoPanelCollapsed ? 'center' : 'space-between',
+                justifyContent: dmGameStore.isInfoPanelCollapsed ? 'center' : 'space-between',
                 alignItems: 'center',
-                marginBottom: isInfoPanelCollapsed ? '0' : '16px'
+                marginBottom: dmGameStore.isInfoPanelCollapsed ? '0' : '16px'
               }}>
-                {!isInfoPanelCollapsed && (
+                {!dmGameStore.isInfoPanelCollapsed && (
                   <h2 style={{
                     margin: '0',
                     fontSize: '18px',
@@ -357,7 +371,7 @@ export function Action({}: ActionProps = {}) {
                 )}
                 
                 <button
-                  onClick={() => setIsInfoPanelCollapsed(!isInfoPanelCollapsed)}
+                  onClick={() => dmGameStore.setInfoPanelCollapsed(!dmGameStore.isInfoPanelCollapsed)}
                   style={{
                     background: 'none',
                     border: '1px solid #30363d',
@@ -372,13 +386,13 @@ export function Action({}: ActionProps = {}) {
                     width: '28px',
                     height: '28px'
                   }}
-                  title={isInfoPanelCollapsed ? "Expand info panel" : "Collapse info panel"}
+                  title={dmGameStore.isInfoPanelCollapsed ? "Expand info panel" : "Collapse info panel"}
                 >
-                  {isInfoPanelCollapsed ? '◀' : '▶'}
+                  {dmGameStore.isInfoPanelCollapsed ? '◀' : '▶'}
                 </button>
               </div>
               
-              {!isInfoPanelCollapsed && (
+              {!dmGameStore.isInfoPanelCollapsed && (
                 <div>
                   {/* Map Information */}
                   <div style={{
@@ -389,12 +403,12 @@ export function Action({}: ActionProps = {}) {
                     marginBottom: '16px'
                   }}>
                     <h3 style={{ margin: '0 0 8px 0', fontSize: '16px', fontWeight: '600' }}>
-                      {mapInfo?.name || 'Untitled Map'}
+                      {dmGameStore.mapInfo?.name || 'Untitled Map'}
                     </h3>
                     
-                    {mapInfo?.updatedAt && (
+                    {dmGameStore.mapInfo?.updatedAt && (
                       <p style={{ margin: '0 0 8px 0', fontSize: '12px', color: '#7d8590' }}>
-                        🕒 Last updated: {new Date(mapInfo.updatedAt).toLocaleDateString()}
+                        🕒 Last updated: {new Date(dmGameStore.mapInfo.updatedAt).toLocaleDateString()}
                       </p>
                     )}
                     

@@ -44,6 +44,8 @@ export function FileOperationsPanel() {
     }
   }
   
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  
   const handleLoad = async () => {
     if (isLoading) return
     
@@ -65,6 +67,57 @@ export function FileOperationsPanel() {
       // Clear status after 3 seconds
       setTimeout(() => setLastOperationStatus(null), 3000)
     }
+  }
+  
+  const handleLoadFromFile = () => {
+    fileInputRef.current?.click()
+  }
+  
+  const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    setIsLoading(true)
+    setLastOperationStatus(null)
+    
+    try {
+      const text = await file.text()
+      const loadMapData = useMapStore.getState().loadMapData
+      
+      // Parse and validate the JSON
+      const data = JSON.parse(text)
+      if (!data || !data.tiles) {
+        setLastOperationStatus('Invalid map file format')
+        return
+      }
+      
+      loadMapData(data)
+      setLastOperationStatus('Map loaded from file successfully!')
+    } catch (error) {
+      console.error('File load failed:', error)
+      setLastOperationStatus('Failed to load file')
+    } finally {
+      setIsLoading(false)
+      // Clear the input
+      event.target.value = ''
+      // Clear status after 3 seconds
+      setTimeout(() => setLastOperationStatus(null), 3000)
+    }
+  }
+  
+  const handleSaveToFile = () => {
+    const mapData = exportMapData()
+    const blob = new Blob([mapData], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `dungeon-map-${new Date().toISOString().split('T')[0]}.json`
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+    setLastOperationStatus('Map downloaded as JSON file!')
+    setTimeout(() => setLastOperationStatus(null), 3000)
   }
   
   const handleNewMap = () => {
@@ -325,6 +378,15 @@ export function FileOperationsPanel() {
   
   return (
     <div className="toolbar-section">
+      {/* Hidden file input for JSON file loading */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".json"
+        onChange={handleFileSelect}
+        style={{ display: 'none' }}
+      />
+      
       <h3 className="toolbar-title">
         File
         {hasUnsavedChanges && (
@@ -341,20 +403,48 @@ export function FileOperationsPanel() {
       <div style={{ display: 'grid', gap: 6 }}>
         <button 
           className="tool-button" 
-          onClick={handleSave}
+          onClick={isDevelopmentMode ? handleSave : handleSave}
           disabled={isLoading}
-          title="Save current map to a JSON file"
+          title={isDevelopmentMode ? "Save map to browser storage" : "Save current map to a JSON file"}
         >
-          💾 Save Map {isLoading ? '...' : ''}
+          💾 {isDevelopmentMode ? 'Save (Storage)' : 'Save Map'} {isLoading ? '...' : ''}
         </button>
+        {isDevelopmentMode && (
+          <button 
+            className="tool-button" 
+            onClick={handleSaveToFile}
+            disabled={isLoading}
+            title="Download map as JSON file to your computer"
+            style={{
+              backgroundColor: '#4a2d4a',
+              border: '1px solid #7c4a7c'
+            }}
+          >
+            💿 Save to File {isLoading ? '...' : ''}
+          </button>
+        )}
         <button 
           className="tool-button" 
-          onClick={handleLoad}
+          onClick={isDevelopmentMode ? handleLoad : handleLoad}
           disabled={isLoading}
-          title="Load map from a JSON file"
+          title={isDevelopmentMode ? "Load map from browser storage" : "Load map from a JSON file"}
         >
-          📁 Load Map {isLoading ? '...' : ''}
+          📁 {isDevelopmentMode ? 'Load (Storage)' : 'Load Map'} {isLoading ? '...' : ''}
         </button>
+        {isDevelopmentMode && (
+          <button 
+            className="tool-button" 
+            onClick={handleLoadFromFile}
+            disabled={isLoading}
+            title="Load map from JSON file on your computer"
+            style={{
+              backgroundColor: '#2d4a4a',
+              border: '1px solid #4a7c7c'
+            }}
+          >
+            📂 Load from File {isLoading ? '...' : ''}
+          </button>
+        )}
         <button 
           className="tool-button" 
           onClick={handleNewMap}

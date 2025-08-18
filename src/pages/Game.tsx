@@ -897,7 +897,8 @@ export default function Game() {
         </div>
 
         <AssetPanel />
-        <GenerationParametersPanel />
+        {/* World generation tools hidden - not suitable for indoor dungeon creation */}
+        {/* <GenerationParametersPanel /> */}
         
         {/* Studio Cosmic North Credits */}
         <div className="toolbar-section">
