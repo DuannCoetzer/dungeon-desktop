@@ -67,6 +67,33 @@ export function FileOperationsPanel() {
     }
   }
   
+  const handleNewMap = () => {
+    if (isLoading) return
+    
+    const confirmed = window.confirm(
+      'Create a new empty map?\n\nThis will clear all current work. Make sure to save your current map first if you want to keep it.'
+    )
+    
+    if (confirmed) {
+      setIsLoading(true)
+      setLastOperationStatus(null)
+      
+      try {
+        // Use the mapStore reset function to create a fresh map
+        const resetMap = useMapStore.getState().reset
+        resetMap()
+        setLastOperationStatus('New map created!')
+      } catch (error) {
+        console.error('New map creation failed:', error)
+        setLastOperationStatus('Failed to create new map.')
+      } finally {
+        setIsLoading(false)
+        // Clear status after 3 seconds
+        setTimeout(() => setLastOperationStatus(null), 3000)
+      }
+    }
+  }
+  
   const handleExportPNG = async () => {
     if (isLoading) return
     
@@ -288,9 +315,29 @@ export function FileOperationsPanel() {
     }
   }
   
+  // Check if there are unsaved changes (simple heuristic: map has content but no recent save/load operation)
+  const hasUnsavedChanges = (
+    Object.keys(mapData.tiles.floor).length > 0 || 
+    Object.keys(mapData.tiles.walls).length > 0 || 
+    Object.keys(mapData.tiles.objects).length > 0 || 
+    assetInstances.length > 0
+  ) && !lastOperationStatus?.includes('saved') && !lastOperationStatus?.includes('loaded')
+  
   return (
     <div className="toolbar-section">
-      <h3 className="toolbar-title">File</h3>
+      <h3 className="toolbar-title">
+        File
+        {hasUnsavedChanges && (
+          <span style={{ 
+            color: '#ff9090', 
+            fontSize: '12px', 
+            marginLeft: '8px',
+            animation: 'pulse 2s infinite'
+          }}>
+            *
+          </span>
+        )}
+      </h3>
       <div style={{ display: 'grid', gap: 6 }}>
         <button 
           className="tool-button" 
@@ -307,6 +354,18 @@ export function FileOperationsPanel() {
           title="Load map from a JSON file"
         >
           📁 Load Map {isLoading ? '...' : ''}
+        </button>
+        <button 
+          className="tool-button" 
+          onClick={handleNewMap}
+          disabled={isLoading}
+          title="Create a new empty map (clears current work)"
+          style={{
+            backgroundColor: '#4a2d4a',
+            border: '1px solid #7c4a7c'
+          }}
+        >
+          📄 New Map {isLoading ? '...' : ''}
         </button>
         <button 
           className="tool-button" 
@@ -381,6 +440,19 @@ export function FileOperationsPanel() {
                         lastOperationStatus.includes('cancelled') ? '#ffff90' : '#ff9090'
           }}>
             {lastOperationStatus}
+          </div>
+        )}
+        
+        {!lastOperationStatus && (
+          <div style={{
+            padding: '6px 8px',
+            fontSize: '11px',
+            color: '#888',
+            textAlign: 'center',
+            fontStyle: 'italic',
+            lineHeight: '1.3'
+          }}>
+            💡 Tip: Use "New Map" for fresh start, "Load Map" to open saved maps
           </div>
         )}
       </div>
