@@ -4,7 +4,7 @@ import { CharacterPanel } from '../components/CharacterPanel'
 import { MeasurementSettings } from '../components/MeasurementSettings'
 import type { MapData, CharacterToken } from '../protocol'
 import { useAssetStore } from '../store/assetStore'
-import { useDMGameStore, useDMGameMapData, useDMGameCharacters, useDMGameSelectedCharacter, useDMGameSession } from '../store/dmGameStore'
+import { useDMGameStore, useDMGameMapData, useDMGameCharacters, useDMGamePendingCharacters, useDMGameSelectedCharacter, useDMGameSession } from '../store/dmGameStore'
 import { dmSubscribeToMapChanges, dmDeserializeMap, dmSetMapData, dmAddCharacter, dmUpdateCharacter, dmDeleteCharacter } from '../dmGameProtocol'
 
 interface ActionProps {}
@@ -14,6 +14,7 @@ export function Action({}: ActionProps = {}) {
   const dmGameStore = useDMGameStore()
   const mapData = useDMGameMapData()
   const characters = useDMGameCharacters()
+  const pendingCharacters = useDMGamePendingCharacters()
   const selectedCharacter = useDMGameSelectedCharacter()
   const hasActiveSession = useDMGameSession()
   
@@ -64,15 +65,34 @@ export function Action({}: ActionProps = {}) {
     loadAssets()
   }, [])
 
-  // Character management handlers - now using isolated DM Game protocol
-  const handleAddCharacter = (character: Omit<CharacterToken, 'id' | 'createdAt' | 'updatedAt'>) => {
-    const newCharacter: CharacterToken = {
-      ...character,
-      id: crypto.randomUUID(),
-      createdAt: new Date().toISOString(),
+  // Character management handlers - create pending characters instead of placing immediately
+  const handleAddCharacter = (character: { name: string; color: string; size: number; isVisible: boolean; avatarAssetId?: string; notes?: string }) => {
+    // Add to pending characters instead of placing on map
+    dmGameStore.addPendingCharacter(character)
+  }
+  
+  const handlePlaceCharacter = (pendingCharacterId: string, x: number, y: number) => {
+    // Get the pending character first
+    const pendingCharacter = pendingCharacters.find(char => char.id === pendingCharacterId)
+    if (!pendingCharacter) return
+    
+    // Create the placed character data
+    const placedCharacter = {
+      ...pendingCharacter,
+      x,
+      y,
       updatedAt: new Date().toISOString()
     }
-    dmAddCharacter(newCharacter)
+    
+    // Add to the isolated DM Game protocol first
+    dmAddCharacter(placedCharacter)
+    
+    // Then update the store to move from pending to placed
+    dmGameStore.placeCharacter(pendingCharacterId, x, y)
+  }
+  
+  const handleRemovePendingCharacter = (id: string) => {
+    dmGameStore.removePendingCharacter(id)
   }
 
   const handleUpdateCharacter = (id: string, updates: Partial<CharacterToken>) => {
@@ -308,9 +328,11 @@ export function Action({}: ActionProps = {}) {
                 <>
                   <CharacterPanel
                     characters={characters}
+                    pendingCharacters={pendingCharacters}
                     onAddCharacter={handleAddCharacter}
                     onUpdateCharacter={handleUpdateCharacter}
                     onDeleteCharacter={handleDeleteCharacter}
+                    onRemovePendingCharacter={handleRemovePendingCharacter}
                     onSelectCharacter={handleSelectCharacter}
                     selectedCharacter={selectedCharacter}
                   />
@@ -338,6 +360,7 @@ export function Action({}: ActionProps = {}) {
               <ActionMapViewer 
                 mapData={mapData} 
                 onMoveCharacter={handleMoveCharacter}
+                onPlaceCharacter={handlePlaceCharacter}
                 selectedCharacterId={selectedCharacter?.id}
                 measurementSettings={dmGameStore.measurementSettings}
               />

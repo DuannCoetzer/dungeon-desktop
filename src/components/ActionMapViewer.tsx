@@ -1,5 +1,7 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react'
+import { useDrop } from 'react-dnd'
 import type { MapData } from '../protocol'
+import type { PendingCharacter } from '../store/dmGameStore'
 import { useAssetStore } from '../store/assetStore'
 import { renderTile, preloadAllTileImages } from '../utils/tileRenderer'
 import type { Palette } from '../store'
@@ -7,6 +9,7 @@ import type { Palette } from '../store'
 interface ActionMapViewerProps {
   mapData: MapData
   onMoveCharacter?: (characterId: string, x: number, y: number) => void
+  onPlaceCharacter?: (pendingCharacterId: string, x: number, y: number) => void
   selectedCharacterId?: string
   measurementSettings?: {
     gridSize: number
@@ -25,10 +28,41 @@ const TILE_SIZE = 32
 const MIN_ZOOM = 0.1
 const MAX_ZOOM = 5.0
 
-export function ActionMapViewer({ mapData, onMoveCharacter, selectedCharacterId, measurementSettings: propMeasurementSettings }: ActionMapViewerProps) {
+export function ActionMapViewer({ mapData, onMoveCharacter, onPlaceCharacter, selectedCharacterId, measurementSettings: propMeasurementSettings }: ActionMapViewerProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const assetStore = useAssetStore()
+  
+  // Set up drop target for pending characters
+  const [{ isOver }, drop] = useDrop({
+    accept: 'pending-character',
+    drop: (item: { character: PendingCharacter }, monitor) => {
+      if (!onPlaceCharacter) return
+      
+      const clientOffset = monitor.getClientOffset()
+      const canvas = canvasRef.current
+      
+      if (!clientOffset || !canvas) return
+      
+      const rect = canvas.getBoundingClientRect()
+      const canvasX = clientOffset.x - rect.left
+      const canvasY = clientOffset.y - rect.top
+      
+      // Convert screen coordinates to world coordinates
+      const worldX = (canvasX - viewport.x) / viewport.scale
+      const worldY = (canvasY - viewport.y) / viewport.scale
+      
+      // Convert to grid coordinates
+      const gridX = Math.floor(worldX / TILE_SIZE)
+      const gridY = Math.floor(worldY / TILE_SIZE)
+      
+      // Place the character
+      onPlaceCharacter(item.character.id, gridX, gridY)
+    },
+    collect: (monitor) => ({
+      isOver: !!monitor.isOver(),
+    }),
+  })
   
   const [viewport, setViewport] = useState<ViewportState>({
     x: 0,
@@ -100,9 +134,36 @@ export function ActionMapViewer({ mapData, onMoveCharacter, selectedCharacterId,
     renderingRef.current = true
     
     try {
-      // Clear canvas
-      ctx.fillStyle = '#0d1117'
+      // Clear canvas with parchment background
+      ctx.fillStyle = '#fffef0'
       ctx.fillRect(0, 0, canvas.width, canvas.height)
+      
+      // Add parchment texture pattern
+      const patternCanvas = document.createElement('canvas')
+      patternCanvas.width = 50
+      patternCanvas.height = 50
+      const patternCtx = patternCanvas.getContext('2d')
+      if (patternCtx) {
+        // Create a subtle noise pattern for parchment texture
+        const imageData = patternCtx.createImageData(50, 50)
+        const data = imageData.data
+        
+        for (let i = 0; i < data.length; i += 4) {
+          const noise = Math.random() * 30 - 15
+          const baseColor = 240 + noise
+          data[i] = Math.max(220, Math.min(255, baseColor - 5))     // R
+          data[i + 1] = Math.max(220, Math.min(255, baseColor - 15))  // G
+          data[i + 2] = Math.max(220, Math.min(255, baseColor - 40))  // B
+          data[i + 3] = 255 // A
+        }
+        
+        patternCtx.putImageData(imageData, 0, 0)
+        const pattern = ctx.createPattern(patternCanvas, 'repeat')
+        if (pattern) {
+          ctx.fillStyle = pattern
+          ctx.fillRect(0, 0, canvas.width, canvas.height)
+        }
+      }
       
       // Save context for transformations
       ctx.save()
@@ -936,13 +997,18 @@ export function ActionMapViewer({ mapData, onMoveCharacter, selectedCharacterId,
 
   return (
     <div 
-      ref={containerRef}
+      ref={(el) => {
+        containerRef.current = el;
+        drop(el);
+      }}
       style={{ 
         width: '100%', 
         height: '100%', 
         position: 'relative',
         overflow: 'hidden',
-        cursor: isDraggingCharacter ? 'grabbing' : (isDragging ? 'grabbing' : 'default')
+        cursor: isDraggingCharacter ? 'grabbing' : (isDragging ? 'grabbing' : 'default'),
+        backgroundColor: isOver ? 'rgba(34, 197, 94, 0.1)' : 'transparent',
+        border: isOver ? '2px dashed #22c55e' : 'none'
       }}
     >
       <canvas

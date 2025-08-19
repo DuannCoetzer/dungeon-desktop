@@ -2,6 +2,19 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type { MapData, CharacterToken } from '../protocol'
 
+// Character that exists but hasn't been placed on the map yet
+export interface PendingCharacter {
+  id: string
+  name: string
+  color: string
+  size: number
+  isVisible: boolean
+  avatarAssetId?: string
+  notes?: string
+  createdAt: string
+  updatedAt: string
+}
+
 export interface DMGameSession {
   // Map state
   mapData: MapData | null
@@ -12,7 +25,8 @@ export interface DMGameSession {
   } | null
   
   // Character state  
-  characters: CharacterToken[]
+  characters: CharacterToken[] // Characters placed on the map
+  pendingCharacters: PendingCharacter[] // Characters created but not yet placed
   selectedCharacterId: string | null
   
   // UI state
@@ -34,6 +48,10 @@ interface DMGameState extends DMGameSession {
   setMapData: (mapData: MapData | null) => void
   setMapInfo: (mapInfo: DMGameSession['mapInfo']) => void
   setCharacters: (characters: CharacterToken[]) => void
+  setPendingCharacters: (characters: PendingCharacter[]) => void
+  addPendingCharacter: (character: Omit<PendingCharacter, 'id' | 'createdAt' | 'updatedAt'>) => void
+  removePendingCharacter: (id: string) => void
+  placeCharacter: (pendingCharacterId: string, x: number, y: number) => void
   setSelectedCharacter: (characterId: string | null) => void
   setCharacterPanelCollapsed: (collapsed: boolean) => void
   setInfoPanelCollapsed: (collapsed: boolean) => void
@@ -47,6 +65,7 @@ const initialState: DMGameSession = {
   mapData: null,
   mapInfo: null,
   characters: [],
+  pendingCharacters: [],
   selectedCharacterId: null,
   isCharacterPanelCollapsed: false,
   isInfoPanelCollapsed: false,
@@ -78,6 +97,48 @@ export const useDMGameStore = create<DMGameState>()(
       
       setCharacters: (characters) => {
         set({ characters })
+      },
+      
+      setPendingCharacters: (pendingCharacters) => {
+        set({ pendingCharacters })
+      },
+      
+      addPendingCharacter: (characterData) => {
+        const newCharacter: PendingCharacter = {
+          ...characterData,
+          id: crypto.randomUUID(),
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        }
+        set(state => ({ 
+          pendingCharacters: [...state.pendingCharacters, newCharacter] 
+        }))
+      },
+      
+      removePendingCharacter: (id) => {
+        set(state => ({
+          pendingCharacters: state.pendingCharacters.filter(char => char.id !== id)
+        }))
+      },
+      
+      placeCharacter: (pendingCharacterId, x, y) => {
+        const state = get()
+        const pendingCharacter = state.pendingCharacters.find(char => char.id === pendingCharacterId)
+        if (!pendingCharacter) return
+        
+        // Create placed character from pending character
+        const placedCharacter: CharacterToken = {
+          ...pendingCharacter,
+          x,
+          y,
+          updatedAt: new Date().toISOString()
+        }
+        
+        // Add to placed characters and remove from pending
+        set({
+          characters: [...state.characters, placedCharacter],
+          pendingCharacters: state.pendingCharacters.filter(char => char.id !== pendingCharacterId)
+        })
       },
       
       setSelectedCharacter: (characterId) => {
@@ -113,6 +174,7 @@ export const useDMGameStore = create<DMGameState>()(
           mapData: state.mapData,
           mapInfo: state.mapInfo,
           characters: state.characters,
+          pendingCharacters: state.pendingCharacters,
           selectedCharacterId: state.selectedCharacterId,
           isCharacterPanelCollapsed: state.isCharacterPanelCollapsed,
           isInfoPanelCollapsed: state.isInfoPanelCollapsed,
@@ -132,6 +194,7 @@ export const useDMGameStore = create<DMGameState>()(
 // Convenience selectors
 export const useDMGameMapData = () => useDMGameStore(state => state.mapData)
 export const useDMGameCharacters = () => useDMGameStore(state => state.characters)
+export const useDMGamePendingCharacters = () => useDMGameStore(state => state.pendingCharacters)
 export const useDMGameSelectedCharacter = () => {
   const characters = useDMGameCharacters()
   const selectedId = useDMGameStore(state => state.selectedCharacterId)

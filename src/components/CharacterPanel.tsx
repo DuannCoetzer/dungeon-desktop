@@ -1,12 +1,16 @@
 import React, { useState } from 'react'
+import { useDrag } from 'react-dnd'
 import type { CharacterToken } from '../protocol'
+import type { PendingCharacter } from '../store/dmGameStore'
 import { useAssetStore } from '../store/assetStore'
 
 interface CharacterPanelProps {
   characters: CharacterToken[]
-  onAddCharacter: (character: Omit<CharacterToken, 'id' | 'createdAt' | 'updatedAt'>) => void
+  pendingCharacters: PendingCharacter[]
+  onAddCharacter: (character: { name: string; color: string; size: number; isVisible: boolean; avatarAssetId?: string; notes?: string }) => void
   onUpdateCharacter: (id: string, updates: Partial<CharacterToken>) => void
   onDeleteCharacter: (id: string) => void
+  onRemovePendingCharacter: (id: string) => void
   onSelectCharacter?: (character: CharacterToken | null) => void
   selectedCharacter?: CharacterToken | null
 }
@@ -25,11 +29,101 @@ const DEFAULT_COLORS = [
   '#ff8844', '#88ff44', '#4488ff', '#ff4488', '#8844ff', '#44ff88'
 ]
 
+// Draggable pending character component
+function DraggablePendingCharacter({ character, onRemove }: { 
+  character: PendingCharacter
+  onRemove: (id: string) => void 
+}) {
+  const assetStore = useAssetStore()
+  
+  const [{ isDragging }, drag] = useDrag({
+    type: 'pending-character',
+    item: { character },
+    collect: (monitor) => ({
+      isDragging: !!monitor.isDragging(),
+    }),
+  })
+
+  return (
+    <div
+      ref={drag}
+      style={{
+        padding: '8px',
+        marginBottom: '6px',
+        backgroundColor: '#0d1117',
+        border: '2px dashed #3b82f6',
+        borderRadius: '4px',
+        cursor: 'grab',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '8px',
+        opacity: isDragging ? 0.5 : 1,
+        transition: 'opacity 0.2s'
+      }}
+      title="Drag to map to place character"
+    >
+      <div
+        style={{
+          width: '12px',
+          height: '12px',
+          backgroundColor: character.color,
+          borderRadius: '50%',
+          opacity: character.isVisible ? 1 : 0.3
+        }}
+      />
+      
+      {character.avatarAssetId && (
+        <img 
+          src={assetStore.getAssetById(character.avatarAssetId)?.src} 
+          alt="Avatar" 
+          style={{ 
+            width: '16px', 
+            height: '16px', 
+            borderRadius: '50%',
+            border: '1px solid #30363d'
+          }} 
+        />
+      )}
+      
+      <div style={{ flex: 1 }}>
+        <div style={{ fontSize: '12px', fontWeight: '500' }}>
+          {character.name}
+        </div>
+        <div style={{ fontSize: '10px', color: '#7d8590' }}>
+          {character.size}x • Drag to place
+          {!character.isVisible && ' • Hidden'}
+        </div>
+      </div>
+
+      <button
+        onClick={(e) => {
+          e.stopPropagation()
+          onRemove(character.id)
+        }}
+        style={{
+          padding: '2px 6px',
+          backgroundColor: '#dc2626',
+          color: '#fff',
+          border: 'none',
+          borderRadius: '3px',
+          fontSize: '10px',
+          cursor: 'pointer'
+        }}
+        title="Delete pending character"
+      >
+        ✖
+      </button>
+    </div>
+  )
+}
+
 export function CharacterPanel({
   characters,
+  pendingCharacters,
   onAddCharacter,
   onUpdateCharacter,
   onDeleteCharacter,
+  onRemovePendingCharacter,
   onSelectCharacter,
   selectedCharacter
 }: CharacterPanelProps) {
@@ -52,8 +146,6 @@ export function CharacterPanel({
     if (newCharacter.name.trim()) {
       onAddCharacter({
         name: newCharacter.name.trim(),
-        x: 0, // Will be set when placed on map
-        y: 0,
         color: newCharacter.color,
         size: newCharacter.size,
         isVisible: newCharacter.isVisible,
@@ -374,16 +466,77 @@ export function CharacterPanel({
         </div>
       )}
 
-      {/* Character List */}
+      {/* Pending Characters */}
+      {pendingCharacters.length > 0 && (
+        <div style={{ marginBottom: '16px' }}>
+          <h4 style={{
+            margin: '0 0 8px 0',
+            fontSize: '14px',
+            fontWeight: '600',
+            color: '#f0f6fc',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px'
+          }}>
+            📝 Ready to Place ({pendingCharacters.length})
+          </h4>
+          <div style={{ 
+            padding: '8px', 
+            backgroundColor: '#161b22', 
+            borderRadius: '6px',
+            border: '1px solid #30363d',
+            marginBottom: '12px'
+          }}>
+            <div style={{
+              fontSize: '11px',
+              color: '#7d8590',
+              marginBottom: '8px',
+              textAlign: 'center'
+            }}>
+              💡 Drag characters below to the map to place them
+            </div>
+            {pendingCharacters.map(character => (
+              <DraggablePendingCharacter
+                key={character.id}
+                character={character}
+                onRemove={onRemovePendingCharacter}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Placed Characters */}
+      <div style={{ marginBottom: '8px' }}>
+        <h4 style={{
+          margin: '0',
+          fontSize: '14px',
+          fontWeight: '600',
+          color: '#f0f6fc'
+        }}>
+          🗺️ On Map ({characters.length})
+        </h4>
+      </div>
+      
       <div style={{ maxHeight: '300px', overflowY: 'auto' }}>
-        {characters.length === 0 ? (
+        {characters.length === 0 && pendingCharacters.length === 0 ? (
           <div style={{
             textAlign: 'center',
             color: '#7d8590',
             fontSize: '14px',
             padding: '20px'
           }}>
-            No characters placed yet
+            No characters created yet
+          </div>
+        ) : characters.length === 0 ? (
+          <div style={{
+            textAlign: 'center',
+            color: '#7d8590',
+            fontSize: '12px',
+            padding: '16px',
+            fontStyle: 'italic'
+          }}>
+            Characters will appear here once placed on the map
           </div>
         ) : (
           characters.map(character => (
