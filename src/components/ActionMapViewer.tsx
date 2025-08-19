@@ -56,6 +56,12 @@ export function ActionMapViewer({ mapData, onMoveCharacter, onPlaceCharacter, se
       const gridX = Math.floor(worldX / TILE_SIZE)
       const gridY = Math.floor(worldY / TILE_SIZE)
       
+      // Check if placement is valid (not on a wall without an object/asset)
+      if (!isValidCharacterPlacement(gridX, gridY)) {
+        console.log('Invalid character placement: Cannot place character on wall tile without object/asset')
+        return
+      }
+      
       // Place the character
       onPlaceCharacter(item.character.id, gridX, gridY)
     },
@@ -75,6 +81,7 @@ export function ActionMapViewer({ mapData, onMoveCharacter, onPlaceCharacter, se
   const [draggedCharacter, setDraggedCharacter] = useState<string | null>(null)
   const [lastMouse, setLastMouse] = useState({ x: 0, y: 0 })
   const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 })
+  const [hoveredTile, setHoveredTile] = useState<{ x: number; y: number; valid: boolean } | null>(null)
 
   // Use measurement settings from props, with fallback to defaults
   const measurementSettings = propMeasurementSettings || {
@@ -472,6 +479,35 @@ export function ActionMapViewer({ mapData, onMoveCharacter, onPlaceCharacter, se
         }
       }
       
+      // Render character placement tile overlay (during character dragging)
+      if (hoveredTile && (isDraggingCharacter || isOver)) {
+        ctx.save()
+        
+        const overlayColor = hoveredTile.valid ? 'rgba(34, 197, 94, 0.3)' : 'rgba(239, 68, 68, 0.3)'
+        const borderColor = hoveredTile.valid ? '#22c55e' : '#ef4444'
+        
+        // Fill the tile with color overlay
+        ctx.fillStyle = overlayColor
+        ctx.fillRect(
+          hoveredTile.x * TILE_SIZE,
+          hoveredTile.y * TILE_SIZE,
+          TILE_SIZE,
+          TILE_SIZE
+        )
+        
+        // Draw border around the tile
+        ctx.strokeStyle = borderColor
+        ctx.lineWidth = 3 / viewport.scale
+        ctx.strokeRect(
+          hoveredTile.x * TILE_SIZE,
+          hoveredTile.y * TILE_SIZE,
+          TILE_SIZE,
+          TILE_SIZE
+        )
+        
+        ctx.restore()
+      }
+      
       // Render measurement lines on top of everything else
       if (measurementLines.length > 0 || currentMeasurement) {
         ctx.save()
@@ -613,7 +649,7 @@ export function ActionMapViewer({ mapData, onMoveCharacter, onPlaceCharacter, se
       // Always reset the rendering flag
       renderingRef.current = false
     }
-  }, [mapData, viewport, assetStore, measurementLines, currentMeasurement, measurementSettings])
+  }, [mapData, viewport, assetStore, measurementLines, currentMeasurement, measurementSettings, hoveredTile, isDraggingCharacter, isOver])
 
   // Helper function to convert screen coordinates to world coordinates
   const screenToWorld = useCallback((screenX: number, screenY: number) => {
@@ -626,6 +662,28 @@ export function ActionMapViewer({ mapData, onMoveCharacter, onPlaceCharacter, se
     
     return { x, y }
   }, [viewport])
+
+  // Helper function to check if a grid position is valid for character placement
+  const isValidCharacterPlacement = useCallback((gridX: number, gridY: number) => {
+    const tileKey = `${gridX},${gridY}`
+    
+    // Check if there's a wall at this position
+    const hasWall = mapData.tiles.walls && mapData.tiles.walls[tileKey]
+    
+    // If there's no wall, placement is always valid
+    if (!hasWall) {
+      return true
+    }
+    
+    // If there's a wall, check if there's an object or asset on the same tile
+    const hasObject = mapData.tiles.objects && mapData.tiles.objects[tileKey]
+    const hasAsset = mapData.assetInstances && mapData.assetInstances.some(asset => 
+      asset.x === gridX && asset.y === gridY
+    )
+    
+    // Character can be placed on a wall only if there's an object or asset there
+    return hasObject || hasAsset
+  }, [mapData.tiles.walls, mapData.tiles.objects, mapData.assetInstances])
 
   // Helper function to check if a point is inside a character token
   const getCharacterAtPoint = useCallback((worldX: number, worldY: number) => {
@@ -724,6 +782,16 @@ export function ActionMapViewer({ mapData, onMoveCharacter, onPlaceCharacter, se
       const tileX = Math.floor(worldPos.x / TILE_SIZE)
       const tileY = Math.floor(worldPos.y / TILE_SIZE)
       
+      // Update hovered tile for visual feedback
+      const isValid = isValidCharacterPlacement(tileX, tileY)
+      setHoveredTile({ x: tileX, y: tileY, valid: isValid })
+      
+      // Check if the new position is valid for character placement
+      if (!isValid) {
+        // Don't move to invalid positions (walls without objects/assets)
+        return
+      }
+      
       // Only update if position actually changed to avoid unnecessary re-renders
       const currentCharacter = mapData.characters?.find(c => c.id === draggedCharacter)
       if (currentCharacter && (currentCharacter.x !== tileX || currentCharacter.y !== tileY)) {
@@ -775,6 +843,7 @@ export function ActionMapViewer({ mapData, onMoveCharacter, onPlaceCharacter, se
       setIsDraggingCharacter(false)
       setDraggedCharacter(null)
       setDragOffset({ x: 0, y: 0 })
+      setHoveredTile(null) // Clear hover state
     }
     
     setIsDragging(false)
