@@ -1,9 +1,10 @@
 import { useState, useRef } from 'react'
-import { useMapStore, useAssetInstances } from '../mapStore'
+import { useMapStore, useAssetInstances, useLayerSettings } from '../mapStore'
 import { useUIStore } from '../uiStore'
 import { getSavedMaps, exportMapData } from '../services/tauri'
 import { useAssetStore } from '../store/assetStore'
-import { getCachedTileImage, TILE_IMAGE_MAP } from '../utils/tileRenderer'
+import { getCachedTileImage, renderTile, loadTileImage, TILE_IMAGE_MAP } from '../utils/tileRenderer'
+import { applyParchmentBackground } from '../utils/canvasUtils'
 import type { Palette } from '../store'
 
 export function FileOperationsPanel() {
@@ -16,6 +17,7 @@ export function FileOperationsPanel() {
   const assetInstances = useAssetInstances()
   const mapData = useMapStore(state => state.mapData)
   const assetStore = useAssetStore()
+  const layerSettings = useLayerSettings()
   
   // Check if we're in development mode
   const isDevelopmentMode = typeof window !== 'undefined' && (window as any).__TAURI__ === undefined
@@ -218,8 +220,8 @@ export function FileOperationsPanel() {
       exportCanvas.width = mapWidth
       exportCanvas.height = mapHeight
       
-      // Set transparent background to preserve alpha
-      exportCtx.clearRect(0, 0, mapWidth, mapHeight)
+      // Apply parchment background matching the main view
+      applyParchmentBackground(exportCtx, mapWidth, mapHeight)
       
       // Helper function to convert world coordinates to export canvas coordinates
       const worldToExport = (x: number, y: number) => ({
@@ -227,87 +229,103 @@ export function FileOperationsPanel() {
         sy: (y - minY) * TILE_SIZE * EXPORT_SCALE
       })
       
-      // Helper function to render a tile with proper image
-      const renderTileForExport = (ctx: CanvasRenderingContext2D, palette: Palette, x: number, y: number, size: number) => {
-        const img = getCachedTileImage(palette)
-        
-        if (img) {
-          ctx.drawImage(img, x, y, size, size)
-        } else {
-          // Fallback to color if image not loaded
-          let color = '#4a7c2a' // grass
-          switch (palette) {
-            case 'wall':
-            case 'wall-brick':
-            case 'wall-stone':
-            case 'wall-wood':
-              color = '#5a5a5a'
-              break
-            case 'floor-stone-rough':
-              color = '#666666'
-              break
-            case 'floor-stone-smooth':
-              color = '#777777'
-              break
-            case 'floor-wood-planks':
-              color = '#8b4513'
-              break
-            case 'floor-cobblestone':
-              color = '#696969'
-              break
+      // Pre-load all tile images to ensure they're available for export
+      await Promise.all(
+        Object.values(TILE_IMAGE_MAP).map(async (tileType) => {
+          try {
+            await loadTileImage(tileType as Palette)
+          } catch (error) {
+            console.warn(`Failed to load tile for export: ${tileType}`, error)
           }
-          ctx.fillStyle = color
-          ctx.fillRect(x, y, size, size)
-        }
-      }
+        })
+      )
       
-      // Draw tiles using proper tile renderer
+      // Draw tiles using proper tile renderer, respecting layer visibility and opacity
       const layerOrder: Array<keyof typeof tiles> = ['floor', 'walls', 'objects']
       for (const layer of layerOrder) {
+        // Skip layer if not visible in UI
+        if (!layerSettings[layer].visible) continue;
+        
+        // Apply layer opacity settings
+        const originalGlobalAlpha = exportCtx.globalAlpha
+        exportCtx.globalAlpha = layerSettings[layer].opacity
+        
         for (const k of Object.keys(tiles[layer])) {
           const [tx, ty] = k.split(',').map(Number)
           const { sx, sy } = worldToExport(tx, ty)
           const size = TILE_SIZE * EXPORT_SCALE
           const palette = tiles[layer][k] as Palette
           
-          renderTileForExport(exportCtx, palette, sx, sy, size)
+          // Use the shared tile renderer
+          renderTile(exportCtx, palette, sx, sy, size)
         }
+        
+        // Restore original alpha
+        exportCtx.globalAlpha = originalGlobalAlpha
       }
       
-      // Load and draw assets using asset store
-      const assetPromises = assetInstances.map(async (instance) => {
-        try {
-          // Find the asset data from asset store (includes both default and imported assets)
-          const asset = assetStore.getAssetById(instance.assetId)
-          
-          if (!asset) {
-            console.warn(`Asset not found in store: ${instance.assetId}`)
-            return
+      // Skip asset rendering if layer is hidden
+      if (layerSettings.assets.visible) {
+        // Apply layer opacity settings
+        const originalGlobalAlpha = exportCtx.globalAlpha
+        exportCtx.globalAlpha = layerSettings.assets.opacity
+        
+        // Preload all assets first to ensure they're available for export
+        const assetImageMap = new Map<string, HTMLImageElement>()
+        
+        // Load all asset images first
+        const assetLoadPromises = assetInstances.map(async (instance) => {
+          try {
+            const asset = assetStore.getAssetById(instance.assetId)
+            if (!asset) {
+              console.warn(`Asset not found in store: ${instance.assetId}`)
+              return
+            }
+            
+            const img = new Image()
+            await new Promise<void>((resolve, reject) => {
+              img.onload = () => resolve()
+              img.onerror = () => reject(new Error(`Failed to load asset: ${asset.src}`))
+              img.src = asset.src
+            })
+            
+            // Store loaded image in map by instance id for later use
+            assetImageMap.set(instance.id, img)
+          } catch (error) {
+            console.warn(`Failed to load asset ${instance.id}:`, error)
           }
-          
-          const img = new Image()
-          await new Promise<void>((resolve, reject) => {
-            img.onload = () => resolve()
-            img.onerror = () => reject(new Error(`Failed to load asset: ${asset.src}`))
-            img.src = asset.src
-          })
-          
-          const { sx, sy } = worldToExport(instance.x, instance.y)
-          const width = (asset.gridWidth || 1) * TILE_SIZE * EXPORT_SCALE
-          const height = (asset.gridHeight || 1) * TILE_SIZE * EXPORT_SCALE
-          
-          // Save context for rotation
-          exportCtx.save()
-          exportCtx.translate(sx + width / 2, sy + height / 2)
-          exportCtx.rotate((instance.rotation * Math.PI) / 180)
-          exportCtx.drawImage(img, -width / 2, -height / 2, width, height)
-          exportCtx.restore()
-        } catch (error) {
-          console.warn(`Failed to render asset ${instance.id}:`, error)
+        })
+        
+        // Wait for all assets to load
+        await Promise.all(assetLoadPromises)
+        
+        // Now render all assets using the loaded images
+        for (const instance of assetInstances) {
+          try {
+            const img = assetImageMap.get(instance.id)
+            if (!img) continue
+            
+            const asset = assetStore.getAssetById(instance.assetId)
+            if (!asset) continue
+            
+            const { sx, sy } = worldToExport(instance.x, instance.y)
+            const width = (asset.gridWidth || 1) * TILE_SIZE * EXPORT_SCALE
+            const height = (asset.gridHeight || 1) * TILE_SIZE * EXPORT_SCALE
+            
+            // Save context for rotation
+            exportCtx.save()
+            exportCtx.translate(sx + width / 2, sy + height / 2)
+            exportCtx.rotate((instance.rotation * Math.PI) / 180)
+            exportCtx.drawImage(img, -width / 2, -height / 2, width, height)
+            exportCtx.restore()
+          } catch (error) {
+            console.warn(`Failed to render asset ${instance.id}:`, error)
+          }
         }
-      })
-      
-      await Promise.all(assetPromises)
+        
+        // Restore original alpha
+        exportCtx.globalAlpha = originalGlobalAlpha
+      }
       
       // Convert to blob and download
       exportCanvas.toBlob((blob) => {

@@ -16,6 +16,7 @@ import { TileBrowser } from '../components/TileBrowser'
 import { useAllAssets } from '../store/assetStore'
 import { useTileStore } from '../store/tileStore'
 import { preloadAllTileImages, renderTile } from '../utils/tileRenderer'
+import { applyParchmentBackground } from '../utils/canvasUtils'
 import type { Palette } from '../store'
 import { About } from '../components/About'
 
@@ -192,40 +193,7 @@ export default function Game() {
       // Ignore if not supported
     }
 
-    // Create parchment pattern once and cache it
-    let parchmentPattern: CanvasPattern | null = null
-    const createParchmentPattern = () => {
-      if (parchmentPattern) return parchmentPattern // Return cached pattern
-      
-      try {
-        // Create pattern canvas with simple noise like DM game
-        const patternCanvas = document.createElement('canvas')
-        patternCanvas.width = 50
-        patternCanvas.height = 50
-        const patternCtx = patternCanvas.getContext('2d')
-        if (!patternCtx) return null
-        
-        // Create a subtle noise pattern for parchment texture
-        const imageData = patternCtx.createImageData(50, 50)
-        const data = imageData.data
-        
-        for (let i = 0; i < data.length; i += 4) {
-          const noise = Math.random() * 30 - 15
-          const baseColor = 240 + noise
-          data[i] = Math.max(220, Math.min(255, baseColor - 5))     // R
-          data[i + 1] = Math.max(220, Math.min(255, baseColor - 15))  // G
-          data[i + 2] = Math.max(220, Math.min(255, baseColor - 40))  // B
-          data[i + 3] = 255 // A
-        }
-        
-        patternCtx.putImageData(imageData, 0, 0)
-        parchmentPattern = ctx.createPattern(patternCanvas, 'repeat')
-        return parchmentPattern
-      } catch (error) {
-        console.error('Error creating parchment pattern:', error)
-        return null
-      }
-    }
+    // Use shared parchment pattern functionality
 
     // camera state for pan/zoom - use state directly instead of props
     let scale = 1
@@ -266,16 +234,8 @@ export default function Game() {
       const rect = stage.getBoundingClientRect()
       ctx.clearRect(0, 0, rect.width, rect.height)
       
-      // Apply parchment background - first solid color, then pattern
-      ctx.fillStyle = '#fffef0'
-      ctx.fillRect(0, 0, rect.width, rect.height)
-      
-      // Apply cached parchment texture pattern
-      const pattern = createParchmentPattern()
-      if (pattern) {
-        ctx.fillStyle = pattern
-        ctx.fillRect(0, 0, rect.width, rect.height)
-      }
+      // Apply parchment background using shared utility
+      applyParchmentBackground(ctx, rect.width, rect.height)
       
       // Only draw grid lines if grid is visible
       const { isGridVisible } = useUIStore.getState()
