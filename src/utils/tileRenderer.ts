@@ -23,6 +23,8 @@ export const TILE_IMAGE_MAP: Record<string, string> = {
   'wall-brick': TileWallBrick,
   'wall-stone': TileWallStone,
   'wall-wood': TileWallWood,
+  // Fog uses a semi-transparent black overlay, no specific image needed
+  'fog': '', // Will use fallback color
 }
 
 // Cache for loaded images
@@ -139,6 +141,8 @@ function getTileFallbackColor(palette: Palette): string {
       return '#8b4513'
     case 'floor-cobblestone':
       return '#696969'
+    case 'fog':
+      return 'rgba(0, 10, 20, 0.8)' // Semi-transparent dark blue-black
     default:
       return '#4a7c2a' // Default to grass color
   }

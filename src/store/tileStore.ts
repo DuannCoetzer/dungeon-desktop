@@ -49,6 +49,31 @@ interface TileState {
   loadDefaultTiles: () => void
 }
 
+// Create a fog tile image as a data URL
+function createFogTileDataURL(): string {
+  // Create a 32x32 canvas with dark semi-transparent fog
+  const canvas = document.createElement('canvas')
+  canvas.width = 32
+  canvas.height = 32
+  const ctx = canvas.getContext('2d')!
+  
+  // Fill with dark semi-transparent color
+  ctx.fillStyle = 'rgba(10, 20, 30, 0.8)' // Dark blue-black with transparency
+  ctx.fillRect(0, 0, 32, 32)
+  
+  // Add some texture/pattern
+  ctx.fillStyle = 'rgba(5, 10, 15, 0.3)'
+  for (let i = 0; i < 8; i++) {
+    for (let j = 0; j < 8; j++) {
+      if ((i + j) % 2 === 0) {
+        ctx.fillRect(i * 4, j * 4, 4, 4)
+      }
+    }
+  }
+  
+  return canvas.toDataURL()
+}
+
 // Default tile categories
 const DEFAULT_CATEGORIES = [
   { id: 'floors' as TileCategory, name: 'Floors', description: 'Floor tiles and terrain', color: '#22d3ee' },
@@ -74,7 +99,8 @@ const DEFAULT_TILES: Omit<Tile, 'id'>[] = [
   { name: 'Wood Wall', category: 'walls', src: TileWallWood, isDefault: true },
   
   // Special tiles
-  { name: 'Eraser', category: 'special', src: IconErase, isDefault: true }
+  { name: 'Eraser', category: 'special', src: IconErase, isDefault: true },
+  { name: 'Fog of War', category: 'special', src: createFogTileDataURL(), isDefault: true } // Dark fog tile for painting fog of war
 ]
 
 export const useTileStore = create<TileState>()(
@@ -186,9 +212,8 @@ export const useTileStore = create<TileState>()(
       loadDefaultTiles: () => {
         const state = get()
         
-        // Only load default tiles if they haven't been loaded yet
-        if (state.tiles.some(t => t.isDefault)) return
-        
+        // For version 2, we need to reload to include the fog tile
+        // Remove all existing default tiles and reload them
         const defaultTiles: Tile[] = DEFAULT_TILES.map((tile, index) => ({
           ...tile,
           id: `default_${index}`,
@@ -202,7 +227,7 @@ export const useTileStore = create<TileState>()(
     }),
     {
       name: 'tile-store',
-      version: 1
+      version: 2 // Bumped to force reload with fog tile
     }
   )
 )

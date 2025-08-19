@@ -38,6 +38,9 @@ export interface DMGameSession {
     units: string
   }
   
+  // Fog of war settings
+  fogOfWarEnabled: boolean
+  
   // Session metadata
   isActive: boolean
   lastActiveAt: string | null
@@ -56,6 +59,7 @@ interface DMGameState extends DMGameSession {
   setCharacterPanelCollapsed: (collapsed: boolean) => void
   setInfoPanelCollapsed: (collapsed: boolean) => void
   setMeasurementSettings: (settings: DMGameSession['measurementSettings']) => void
+  setFogOfWarEnabled: (enabled: boolean) => void
   setSessionActive: (active: boolean) => void
   clearSession: () => void
   restoreSession: () => DMGameSession
@@ -74,6 +78,7 @@ const initialState: DMGameSession = {
     distancePerCell: 5,
     units: 'ft'
   },
+  fogOfWarEnabled: false,
   isActive: false,
   lastActiveAt: null
 }
@@ -134,11 +139,14 @@ export const useDMGameStore = create<DMGameState>()(
           updatedAt: new Date().toISOString()
         }
         
+        const newCharacters = [...state.characters, placedCharacter]
+        
         // Add to placed characters and remove from pending
         set({
-          characters: [...state.characters, placedCharacter],
+          characters: newCharacters,
           pendingCharacters: state.pendingCharacters.filter(char => char.id !== pendingCharacterId)
         })
+        
       },
       
       setSelectedCharacter: (characterId) => {
@@ -155,6 +163,10 @@ export const useDMGameStore = create<DMGameState>()(
       
       setMeasurementSettings: (settings) => {
         set({ measurementSettings: settings })
+      },
+      
+      setFogOfWarEnabled: (enabled) => {
+        set({ fogOfWarEnabled: enabled })
       },
       
       setSessionActive: (active) => {
@@ -186,7 +198,7 @@ export const useDMGameStore = create<DMGameState>()(
     }),
     {
       name: 'dm-game-session',
-      version: 1
+      version: 2
     }
   )
 )

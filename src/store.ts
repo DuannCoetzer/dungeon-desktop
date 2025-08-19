@@ -22,7 +22,9 @@ export type Palette =
   | 'wall-brick'
   | 'wall-stone'
   | 'wall-wood'
-export type Layer = 'floor' | 'walls' | 'objects' | 'assets'
+  // Special tiles
+  | 'fog'
+export type Layer = 'floor' | 'walls' | 'objects' | 'assets' | 'fog'
 export type TileMap = Record<string, TileType>
 
 export interface Asset {

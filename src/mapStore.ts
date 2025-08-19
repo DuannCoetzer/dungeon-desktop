@@ -85,6 +85,7 @@ export const useMapStore = create<MapState>((set, get) => {
       walls: { visible: true, opacity: 1 },
       objects: { visible: true, opacity: 1 },
       assets: { visible: true, opacity: 1 },
+      fog: { visible: true, opacity: 1 },
     },
     selectedAssetInstances: [],
     selectedAssetForPlacement: null,
@@ -101,7 +102,7 @@ export const useMapStore = create<MapState>((set, get) => {
     setTiles: (tiles) => {
       // Update each layer through protocol
       Object.entries(tiles).forEach(([layer, tileMap]) => {
-        if (['floor', 'walls', 'objects', 'assets'].includes(layer)) {
+        if (['floor', 'walls', 'objects', 'assets', 'fog'].includes(layer)) {
           // Clear layer first, then set new tiles
           const currentMapData = get().mapData
           const currentTiles = currentMapData.tiles[layer as Layer]
@@ -217,6 +218,7 @@ export const useMapStore = create<MapState>((set, get) => {
           walls: { visible: true, opacity: 1 },
           objects: { visible: true, opacity: 1 },
           assets: { visible: true, opacity: 1 },
+          fog: { visible: true, opacity: 1 },
         },
         selectedAssetInstances: [],
         selectedAssetForPlacement: null,

@@ -42,7 +42,8 @@ export function TileBrowser({ onTileSelect, className = '' }: TileBrowserProps) 
       'default_6': 'wall-brick',
       'default_7': 'wall-stone',
       'default_8': 'wall-wood',
-      'default_9': 'delete'
+      'default_9': 'delete',
+      'default_10': 'fog' // Fog of War tile
     }
     
     return legacyMap[tile.id] || tile.id

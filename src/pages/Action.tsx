@@ -350,6 +350,48 @@ export function Action({}: ActionProps = {}) {
                       />
                     </div>
                   )}
+                  
+                  {/* Fog of War Settings - show only when map has content */}
+                  {mapData && (Object.keys(mapData.tiles?.floor || {}).length > 0 || Object.keys(mapData.tiles?.walls || {}).length > 0) && (
+                    <div style={{
+                      marginTop: '16px',
+                      backgroundColor: '#161b22',
+                      border: '1px solid #30363d',
+                      borderRadius: '6px',
+                      padding: '12px'
+                    }}>
+                      <h3 style={{
+                        margin: '0 0 12px 0',
+                        fontSize: '16px',
+                        fontWeight: '600',
+                        color: '#f0f6fc'
+                      }}>
+                        🌫️ Fog of War
+                      </h3>
+                      
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px' }}>
+                        <input
+                          type="checkbox"
+                          id="fogOfWar"
+                          checked={dmGameStore.fogOfWarEnabled}
+                          onChange={() => dmGameStore.setFogOfWarEnabled(!dmGameStore.fogOfWarEnabled)}
+                          style={{ margin: 0 }}
+                        />
+                        <label htmlFor="fogOfWar" style={{ color: '#e6e6e6' }}>Enable Fog of War</label>
+                      </div>
+                      
+                      {dmGameStore.fogOfWarEnabled && (
+                        <div style={{
+                          marginTop: '8px',
+                          fontSize: '11px',
+                          color: '#7d8590',
+                          lineHeight: 1.4
+                        }}>
+                          Paint fog tiles on the map in the Map Builder, then characters will reveal them as they explore.
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </>
               )}
             </div>
@@ -357,12 +399,13 @@ export function Action({}: ActionProps = {}) {
             {/* Map viewer area */}
             <div style={{ flex: 1, position: 'relative' }}>
               {/* Full-screen map viewer */}
-              <ActionMapViewer 
+                <ActionMapViewer 
                 mapData={mapData} 
                 onMoveCharacter={handleMoveCharacter}
                 onPlaceCharacter={handlePlaceCharacter}
                 selectedCharacterId={selectedCharacter?.id}
                 measurementSettings={dmGameStore.measurementSettings}
+                fogOfWarEnabled={dmGameStore.fogOfWarEnabled}
               />
             </div>
             

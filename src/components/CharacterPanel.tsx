@@ -7,7 +7,7 @@ import { useAssetStore } from '../store/assetStore'
 interface CharacterPanelProps {
   characters: CharacterToken[]
   pendingCharacters: PendingCharacter[]
-  onAddCharacter: (character: { name: string; color: string; size: number; isVisible: boolean; avatarAssetId?: string; notes?: string }) => void
+  onAddCharacter: (character: { name: string; color: string; size: number; isVisible: boolean; avatarAssetId?: string; notes?: string; revealRange?: number }) => void
   onUpdateCharacter: (id: string, updates: Partial<CharacterToken>) => void
   onDeleteCharacter: (id: string) => void
   onRemovePendingCharacter: (id: string) => void
@@ -22,6 +22,7 @@ interface NewCharacterForm {
   isVisible: boolean
   avatarAssetId?: string
   notes: string
+  revealRange?: number
 }
 
 const DEFAULT_COLORS = [
@@ -136,7 +137,8 @@ export function CharacterPanel({
     size: 1,
     isVisible: true,
     avatarAssetId: undefined,
-    notes: ''
+    notes: '',
+    revealRange: 3
   })
   const [showAvatarPicker, setShowAvatarPicker] = useState(false)
   
@@ -150,7 +152,8 @@ export function CharacterPanel({
         size: newCharacter.size,
         isVisible: newCharacter.isVisible,
         avatarAssetId: newCharacter.avatarAssetId,
-        notes: newCharacter.notes.trim() || undefined
+        notes: newCharacter.notes.trim() || undefined,
+        revealRange: newCharacter.revealRange
       })
       
       setNewCharacter({
@@ -159,7 +162,8 @@ export function CharacterPanel({
         size: 1,
         isVisible: true,
         avatarAssetId: undefined,
-        notes: ''
+        notes: '',
+        revealRange: 3
       })
       setIsAddingCharacter(false)
       setShowAvatarPicker(false)
@@ -168,7 +172,7 @@ export function CharacterPanel({
 
   const handleUpdateCharacter = (character: CharacterToken, updates: Partial<CharacterToken>) => {
     onUpdateCharacter(character.id, updates)
-    setEditingCharacter(null)
+    // Don't close the editing form automatically - let user click "Done Editing"
   }
 
   const handleSelectCharacter = (character: CharacterToken) => {
@@ -419,6 +423,24 @@ export function CharacterPanel({
             />
           </div>
 
+          <div style={{ marginBottom: '8px' }}>
+            <label style={{ display: 'block', fontSize: '12px', marginBottom: '4px' }}>
+              Fog Reveal Range: {newCharacter.revealRange || 3} tiles
+            </label>
+            <input
+              type="range"
+              min="1"
+              max="8"
+              step="1"
+              value={newCharacter.revealRange || 3}
+              onChange={(e) => setNewCharacter({ ...newCharacter, revealRange: parseInt(e.target.value) })}
+              style={{ width: '100%' }}
+            />
+            <div style={{ fontSize: '10px', color: '#7d8590', marginTop: '2px' }}>
+              How many tiles around this character will reveal fog of war
+            </div>
+          </div>
+
           <div style={{ marginBottom: '12px' }}>
             <label style={{ display: 'flex', alignItems: 'center', fontSize: '12px' }}>
               <input
@@ -570,12 +592,31 @@ export function CharacterPanel({
                   {character.name}
                 </div>
                 <div style={{ fontSize: '10px', color: '#7d8590' }}>
-                  ({character.x}, {character.y}) • {character.size}x
+                  ({character.x}, {character.y}) • {character.size}x • Reveals {character.revealRange || 3} tiles
                   {!character.isVisible && ' • Hidden'}
                 </div>
               </div>
 
               <div style={{ display: 'flex', gap: '4px' }}>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setEditingCharacter(editingCharacter === character.id ? null : character.id)
+                  }}
+                  style={{
+                    padding: '2px 6px',
+                    backgroundColor: editingCharacter === character.id ? '#3b82f6' : '#6b7280',
+                    color: '#fff',
+                    border: 'none',
+                    borderRadius: '3px',
+                    fontSize: '10px',
+                    cursor: 'pointer'
+                  }}
+                  title="Edit character settings"
+                >
+                  ⚙️
+                </button>
+                
                 <button
                   onClick={(e) => {
                     e.stopPropagation()
@@ -619,19 +660,82 @@ export function CharacterPanel({
         )}
       </div>
 
-          {selectedCharacter && (
-            <div style={{
-              marginTop: '12px',
-              padding: '8px',
-              backgroundColor: '#0d1117',
-              borderRadius: '4px',
-              border: '1px solid #30363d',
-              fontSize: '11px',
-              color: '#7d8590'
-            }}>
-              💡 Click on the map to move {selectedCharacter.name}
+      {/* Character Editing Form */}
+      {editingCharacter && (() => {
+        const character = characters.find(c => c.id === editingCharacter)
+        return character ? (
+          <div style={{
+            marginTop: '12px',
+            padding: '12px',
+            backgroundColor: '#0d1117',
+            border: '1px solid #3b82f6',
+            borderRadius: '6px'
+          }}>
+            <h5 style={{ margin: '0 0 8px 0', fontSize: '14px', color: '#3b82f6' }}>Editing: {character.name}</h5>
+            
+            <div style={{ marginBottom: '8px' }}>
+              <label style={{ display: 'block', fontSize: '12px', marginBottom: '4px' }}>Reveal Range: {character.revealRange || 3} tiles</label>
+              <input
+                type="range"
+                min="1"
+                max="8"
+                step="1"
+                value={character.revealRange || 3}
+                onChange={(e) => handleUpdateCharacter(character, { revealRange: parseInt(e.target.value) })}
+                style={{ width: '100%' }}
+              />
+              <div style={{ fontSize: '10px', color: '#7d8590', marginTop: '2px' }}>
+                How many tiles around this character will reveal fog of war
+              </div>
             </div>
-          )}
+
+            <div style={{ marginBottom: '8px' }}>
+              <label style={{ display: 'block', fontSize: '12px', marginBottom: '4px' }}>Size: {character.size}x</label>
+              <input
+                type="range"
+                min="0.5"
+                max="2"
+                step="0.1"
+                value={character.size}
+                onChange={(e) => handleUpdateCharacter(character, { size: parseFloat(e.target.value) })}
+                style={{ width: '100%' }}
+              />
+            </div>
+            
+            <div style={{ display: 'flex', gap: '6px', marginTop: '10px' }}>
+              <button
+                onClick={() => setEditingCharacter(null)}
+                style={{
+                  flex: 1,
+                  padding: '6px 12px',
+                  backgroundColor: '#238636',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: '4px',
+                  fontSize: '12px',
+                  cursor: 'pointer'
+                }}
+              >
+                Done Editing
+              </button>
+            </div>
+          </div>
+        ) : null
+      })()}
+
+      {selectedCharacter && (
+        <div style={{
+          marginTop: '12px',
+          padding: '8px',
+          backgroundColor: '#0d1117',
+          borderRadius: '4px',
+          border: '1px solid #30363d',
+          fontSize: '11px',
+          color: '#7d8590'
+        }}>
+          💡 Click on the map to move {selectedCharacter.name}
+        </div>
+      )}
         </>
       )}
     </div>

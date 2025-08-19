@@ -5,6 +5,7 @@ import type { PendingCharacter } from '../store/dmGameStore'
 import { useAssetStore } from '../store/assetStore'
 import { renderTile, preloadAllTileImages } from '../utils/tileRenderer'
 import type { Palette } from '../store'
+import { getVisibleFogTiles } from '../utils/fogReveal'
 
 interface ActionMapViewerProps {
   mapData: MapData
@@ -16,6 +17,7 @@ interface ActionMapViewerProps {
     distancePerCell: number
     units: string
   }
+  fogOfWarEnabled?: boolean
 }
 
 interface ViewportState {
@@ -28,7 +30,7 @@ const TILE_SIZE = 32
 const MIN_ZOOM = 0.1
 const MAX_ZOOM = 5.0
 
-export function ActionMapViewer({ mapData, onMoveCharacter, onPlaceCharacter, selectedCharacterId, measurementSettings: propMeasurementSettings }: ActionMapViewerProps) {
+export function ActionMapViewer({ mapData, onMoveCharacter, onPlaceCharacter, selectedCharacterId, measurementSettings: propMeasurementSettings, fogOfWarEnabled }: ActionMapViewerProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const assetStore = useAssetStore()
@@ -369,6 +371,50 @@ export function ActionMapViewer({ mapData, onMoveCharacter, onPlaceCharacter, se
         }
       }
       
+      // Render fog of war overlay before characters
+      if (fogOfWarEnabled) {
+        const visibleFogTiles = getVisibleFogTiles(mapData)
+        
+        if (Object.keys(visibleFogTiles).length > 0) {
+          ctx.save()
+          
+          // Create fog overlay
+          ctx.fillStyle = 'rgba(0, 0, 0, 0.7)' // Semi-transparent black fog
+          
+          for (const [tileKey, _] of Object.entries(visibleFogTiles)) {
+            const [x, y] = tileKey.split(',').map(Number)
+            
+            ctx.fillRect(
+              x * TILE_SIZE,
+              y * TILE_SIZE,
+              TILE_SIZE,
+              TILE_SIZE
+            )
+          }
+          
+          // Add subtle texture to fog
+          ctx.globalCompositeOperation = 'multiply'
+          ctx.fillStyle = 'rgba(50, 50, 80, 0.3)' // Slightly blue tint
+          
+          for (const [tileKey, _] of Object.entries(visibleFogTiles)) {
+            const [x, y] = tileKey.split(',').map(Number)
+            
+            // Add some noise for texture
+            const noise = Math.random() * 0.2 + 0.8
+            ctx.globalAlpha = noise
+            
+            ctx.fillRect(
+              x * TILE_SIZE,
+              y * TILE_SIZE,
+              TILE_SIZE,
+              TILE_SIZE
+            )
+          }
+          
+          ctx.restore()
+        }
+      }
+      
       // Render character tokens
       if (mapData.characters && mapData.characters.length > 0) {
         for (const character of mapData.characters) {
@@ -649,7 +695,7 @@ export function ActionMapViewer({ mapData, onMoveCharacter, onPlaceCharacter, se
       // Always reset the rendering flag
       renderingRef.current = false
     }
-  }, [mapData, viewport, assetStore, measurementLines, currentMeasurement, measurementSettings, hoveredTile, isDraggingCharacter, isOver])
+  }, [mapData, viewport, assetStore, measurementLines, currentMeasurement, measurementSettings, hoveredTile, isDraggingCharacter, isOver, fogOfWarEnabled])
 
   // Helper function to convert screen coordinates to world coordinates
   const screenToWorld = useCallback((screenX: number, screenY: number) => {

@@ -16,6 +16,7 @@ export interface CharacterToken {
   isVisible: boolean // For DM to hide/show tokens
   avatarAssetId?: string // Optional character avatar from Asset Manager
   notes?: string // Optional notes for DM
+  revealRange?: number // Fog of war reveal range in tiles (default: 2)
   createdAt: string
   updatedAt: string
 }
@@ -75,7 +76,8 @@ export class MapProtocol {
         floor: {},
         walls: {},
         objects: {},
-        assets: {}
+        assets: {},
+        fog: {}
       },
       assetInstances: [],
       characters: [],
@@ -266,7 +268,7 @@ export class MapProtocol {
       }
       
       // Ensure all required layers exist
-      const requiredLayers = ['floor', 'walls', 'objects', 'assets']
+      const requiredLayers = ['floor', 'walls', 'objects', 'assets', 'fog']
       for (const layer of requiredLayers) {
         if (!data.tiles[layer]) {
           data.tiles[layer] = {}
@@ -313,7 +315,7 @@ export class MapProtocol {
   }
 
   isValidLayer(layer: string): layer is Layer {
-    return ['floor', 'walls', 'objects', 'assets'].includes(layer)
+    return ['floor', 'walls', 'objects', 'assets', 'fog'].includes(layer)
   }
 
   isValidTileType(type: string): type is TileType {
