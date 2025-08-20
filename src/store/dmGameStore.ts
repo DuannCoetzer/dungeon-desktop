@@ -11,6 +11,7 @@ export interface PendingCharacter {
   isVisible: boolean
   avatarAssetId?: string
   notes?: string
+  visionRange: number // Vision range in grid tiles
   createdAt: string
   updatedAt: string
 }
@@ -60,6 +61,7 @@ interface DMGameState extends DMGameSession {
   setInfoPanelCollapsed: (collapsed: boolean) => void
   setMeasurementSettings: (settings: DMGameSession['measurementSettings']) => void
   setFogOfWarEnabled: (enabled: boolean) => void
+  setCharacterVisionRange: (characterId: string, range: number) => void
   setSessionActive: (active: boolean) => void
   clearSession: () => void
   restoreSession: () => DMGameSession
@@ -167,6 +169,23 @@ export const useDMGameStore = create<DMGameState>()(
       
       setFogOfWarEnabled: (enabled) => {
         set({ fogOfWarEnabled: enabled })
+      },
+      
+      setCharacterVisionRange: (characterId, range) => {
+        set(state => ({
+          // Update pending characters
+          pendingCharacters: state.pendingCharacters.map(char => 
+            char.id === characterId 
+              ? { ...char, visionRange: range, updatedAt: new Date().toISOString() }
+              : char
+          ),
+          // Update placed characters
+          characters: state.characters.map(char => 
+            char.id === characterId 
+              ? { ...char, visionRange: range, updatedAt: new Date().toISOString() }
+              : char
+          )
+        }))
       },
       
       setSessionActive: (active) => {

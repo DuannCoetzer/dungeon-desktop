@@ -16,7 +16,7 @@ export interface CharacterToken {
   isVisible: boolean // For DM to hide/show tokens
   avatarAssetId?: string // Optional character avatar from Asset Manager
   notes?: string // Optional notes for DM
-  revealRange?: number // Fog of war reveal range in tiles (default: 2)
+  visionRange: number // Vision range in grid tiles for fog of war
   createdAt: string
   updatedAt: string
 }

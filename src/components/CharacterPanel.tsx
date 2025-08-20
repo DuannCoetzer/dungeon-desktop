@@ -2,12 +2,13 @@ import React, { useState } from 'react'
 import { useDrag } from 'react-dnd'
 import type { CharacterToken } from '../protocol'
 import type { PendingCharacter } from '../store/dmGameStore'
+import { useDMGameStore } from '../store/dmGameStore'
 import { useAssetStore } from '../store/assetStore'
 
 interface CharacterPanelProps {
   characters: CharacterToken[]
   pendingCharacters: PendingCharacter[]
-  onAddCharacter: (character: { name: string; color: string; size: number; isVisible: boolean; avatarAssetId?: string; notes?: string; revealRange?: number }) => void
+  onAddCharacter: (character: { name: string; color: string; size: number; isVisible: boolean; avatarAssetId?: string; notes?: string; visionRange: number }) => void
   onUpdateCharacter: (id: string, updates: Partial<CharacterToken>) => void
   onDeleteCharacter: (id: string) => void
   onRemovePendingCharacter: (id: string) => void
@@ -22,7 +23,7 @@ interface NewCharacterForm {
   isVisible: boolean
   avatarAssetId?: string
   notes: string
-  revealRange?: number
+  visionRange: number
 }
 
 const DEFAULT_COLORS = [
@@ -138,11 +139,12 @@ export function CharacterPanel({
     isVisible: true,
     avatarAssetId: undefined,
     notes: '',
-    revealRange: 3
+    visionRange: 3
   })
   const [showAvatarPicker, setShowAvatarPicker] = useState(false)
   
   const assetStore = useAssetStore()
+  const setCharacterVisionRange = useDMGameStore(state => state.setCharacterVisionRange)
 
   const handleAddCharacter = () => {
     if (newCharacter.name.trim()) {
@@ -153,7 +155,7 @@ export function CharacterPanel({
         isVisible: newCharacter.isVisible,
         avatarAssetId: newCharacter.avatarAssetId,
         notes: newCharacter.notes.trim() || undefined,
-        revealRange: newCharacter.revealRange
+        visionRange: newCharacter.visionRange
       })
       
       setNewCharacter({
@@ -163,7 +165,7 @@ export function CharacterPanel({
         isVisible: true,
         avatarAssetId: undefined,
         notes: '',
-        revealRange: 3
+        visionRange: 3
       })
       setIsAddingCharacter(false)
       setShowAvatarPicker(false)
@@ -425,15 +427,15 @@ export function CharacterPanel({
 
           <div style={{ marginBottom: '8px' }}>
             <label style={{ display: 'block', fontSize: '12px', marginBottom: '4px' }}>
-              Fog Reveal Range: {newCharacter.revealRange || 3} tiles
+              Vision Range: {newCharacter.visionRange} tiles
             </label>
             <input
               type="range"
               min="1"
               max="8"
               step="1"
-              value={newCharacter.revealRange || 3}
-              onChange={(e) => setNewCharacter({ ...newCharacter, revealRange: parseInt(e.target.value) })}
+              value={newCharacter.visionRange}
+              onChange={(e) => setNewCharacter({ ...newCharacter, visionRange: parseInt(e.target.value) })}
               style={{ width: '100%' }}
             />
             <div style={{ fontSize: '10px', color: '#7d8590', marginTop: '2px' }}>
@@ -592,7 +594,7 @@ export function CharacterPanel({
                   {character.name}
                 </div>
                 <div style={{ fontSize: '10px', color: '#7d8590' }}>
-                  ({character.x}, {character.y}) • {character.size}x • Reveals {character.revealRange || 3} tiles
+                  ({character.x}, {character.y}) • {character.size}x • Vision {character.visionRange} tiles
                   {!character.isVisible && ' • Hidden'}
                 </div>
               </div>
@@ -674,14 +676,14 @@ export function CharacterPanel({
             <h5 style={{ margin: '0 0 8px 0', fontSize: '14px', color: '#3b82f6' }}>Editing: {character.name}</h5>
             
             <div style={{ marginBottom: '8px' }}>
-              <label style={{ display: 'block', fontSize: '12px', marginBottom: '4px' }}>Reveal Range: {character.revealRange || 3} tiles</label>
+              <label style={{ display: 'block', fontSize: '12px', marginBottom: '4px' }}>Vision Range: {character.visionRange} tiles</label>
               <input
                 type="range"
                 min="1"
                 max="8"
                 step="1"
-                value={character.revealRange || 3}
-                onChange={(e) => handleUpdateCharacter(character, { revealRange: parseInt(e.target.value) })}
+                value={character.visionRange}
+                onChange={(e) => handleUpdateCharacter(character, { visionRange: parseInt(e.target.value) })}
                 style={{ width: '100%' }}
               />
               <div style={{ fontSize: '10px', color: '#7d8590', marginTop: '2px' }}>
