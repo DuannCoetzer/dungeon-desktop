@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useAssetStore } from '../store/assetStore'
 import { useTileStore } from '../store/tileStore'
-import { isImportedAsset } from '../services/assetPersistence'
+import { isImportedAsset, clearImportedAssets } from '../services/assetPersistence'
 import type { Asset } from '../store'
 import { TileBrowser } from '../components/TileBrowser'
 import './AssetDesigner.css'
@@ -22,6 +22,11 @@ const DEFAULT_CATEGORIES: AssetCategory[] = [
   { id: 'uncategorized', name: 'Uncategorized', description: 'Assets without a category', color: '#6b7280' }
 ]
 
+// Check if running in Tauri desktop app
+const isTauriApp = () => {
+  return typeof window !== 'undefined' && '__TAURI__' in window
+}
+
 export default function AssetDesigner() {
   const assetStore = useAssetStore()
   const tileStore = useTileStore()
@@ -36,6 +41,7 @@ export default function AssetDesigner() {
   const [showImportDialog, setShowImportDialog] = useState(false)
   const [editingAsset, setEditingAsset] = useState<Asset | null>(null)
   const [activeTab, setActiveTab] = useState<'assets' | 'tiles'>('assets')
+  const isDesktopApp = isTauriApp()
 
   // Load assets and tiles on mount
   useEffect(() => {
@@ -121,6 +127,19 @@ export default function AssetDesigner() {
     
     return { total, imported, default: defaultCount, categories }
   }
+  
+  const handleClearAllAssets = async () => {
+    if (window.confirm('Are you sure you want to delete all imported assets? This action cannot be undone.')) {
+      const success = await assetStore.clearAllImportedAssets()
+      if (success) {
+        setSelectedAsset(null)
+        setEditingAsset(null)
+        alert('All imported assets have been cleared.')
+      } else {
+        alert('Failed to clear assets. Please try again.')
+      }
+    }
+  }
 
   const stats = getAssetStats()
 
@@ -167,8 +186,9 @@ export default function AssetDesigner() {
           </div>
           {activeTab === 'assets' && (
             <button 
-              className="btn btn-primary"
+              className={`btn ${isDesktopApp ? 'btn-primary' : 'btn-secondary'}`}
               onClick={() => setShowImportDialog(true)}
+              title={!isDesktopApp ? 'Asset import requires the desktop application' : 'Import assets from your computer'}
             >
               📁 Import Assets
             </button>
@@ -520,6 +540,7 @@ function AssetDetailsPanel({
 // Import assets dialog component
 function ImportAssetsDialog({ onClose }: { onClose: () => void }) {
   const assetStore = useAssetStore()
+  const assetError = useAssetStore(state => state.error)
   const [selectedFiles, setSelectedFiles] = useState<File[]>([])
   const [importing, setImporting] = useState(false)
   const [importProgress, setImportProgress] = useState<{ current: number, total: number }>({ current: 0, total: 0 })
@@ -528,6 +549,7 @@ function ImportAssetsDialog({ onClose }: { onClose: () => void }) {
   const [defaultCategory, setDefaultCategory] = useState('uncategorized')
   const [defaultGridSize, setDefaultGridSize] = useState({ width: 1, height: 1 })
   const [autoDetectSize, setAutoDetectSize] = useState(true)
+  const isDesktopApp = isTauriApp()
 
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.target.files || [])
@@ -563,49 +585,12 @@ function ImportAssetsDialog({ onClose }: { onClose: () => void }) {
     return defaultGridSize // Fallback to default
   }
 
-  // Helper function to compress image while preserving transparency
-  const compressImage = (file: File, maxWidth = 512, quality = 0.8): Promise<string> => {
+  // Convert file to data URL without compression
+  const fileToDataUrl = (file: File): Promise<string> => {
     return new Promise((resolve, reject) => {
-      const canvas = document.createElement('canvas')
-      const ctx = canvas.getContext('2d')
-      const img = new Image()
-      
-      img.onload = () => {
-        // Calculate new dimensions maintaining aspect ratio
-        let { width, height } = img
-        if (width > maxWidth) {
-          height = (height * maxWidth) / width
-          width = maxWidth
-        }
-        if (height > maxWidth) {
-          width = (width * maxWidth) / height
-          height = maxWidth
-        }
-        
-        canvas.width = width
-        canvas.height = height
-        
-        if (!ctx) {
-          reject(new Error('Failed to get canvas context'))
-          return
-        }
-        
-        // Clear canvas to transparent
-        ctx.clearRect(0, 0, width, height)
-        
-        // Draw image preserving transparency
-        ctx.drawImage(img, 0, 0, width, height)
-        
-        // Use PNG format to preserve transparency
-        const compressedDataUrl = canvas.toDataURL('image/png')
-        resolve(compressedDataUrl)
-      }
-      
-      img.onerror = () => reject(new Error('Failed to load image'))
-      
       const reader = new FileReader()
       reader.onload = (e) => {
-        img.src = e.target?.result as string
+        resolve(e.target?.result as string)
       }
       reader.onerror = () => reject(new Error('Failed to read file'))
       reader.readAsDataURL(file)
@@ -626,8 +611,8 @@ function ImportAssetsDialog({ onClose }: { onClose: () => void }) {
       setImportProgress({ current: i + 1, total: selectedFiles.length })
       
       try {
-        // Compress the image to reduce storage size
-        const dataUrl = await compressImage(file)
+        // Convert file to data URL without compression
+        const dataUrl = await fileToDataUrl(file)
         
         let gridSize = defaultGridSize
         
@@ -683,6 +668,7 @@ function ImportAssetsDialog({ onClose }: { onClose: () => void }) {
 
   const handleClose = () => {
     resetDialog()
+    assetStore.clearError() // Clear any errors when closing
     onClose()
   }
 
@@ -723,6 +709,34 @@ function ImportAssetsDialog({ onClose }: { onClose: () => void }) {
           </div>
         ) : (
           <div className="modal-body">
+            {/* Display web mode warning */}
+            {!isDesktopApp && (
+              <div className="warning-message" style={{
+                padding: '12px',
+                backgroundColor: '#f59e0b',
+                color: '#000',
+                borderRadius: '4px',
+                marginBottom: '1rem',
+                fontSize: '0.9rem'
+              }}>
+                <strong>⚠️ Desktop Application Required:</strong> Asset importing is only available in the desktop version. Please download and run the Tauri desktop application to import custom assets.
+              </div>
+            )}
+            
+            {/* Display error messages */}
+            {assetError && (
+              <div className="error-message" style={{
+                padding: '12px',
+                backgroundColor: '#dc2626',
+                color: 'white',
+                borderRadius: '4px',
+                marginBottom: '1rem',
+                fontSize: '0.9rem'
+              }}>
+                <strong>Error:</strong> {assetError}
+              </div>
+            )}
+            
             {!importing ? (
               <>
                 <div className="import-section">
@@ -736,6 +750,9 @@ function ImportAssetsDialog({ onClose }: { onClose: () => void }) {
                   />
                   <p style={{ fontSize: '0.9rem', color: '#aaa', margin: '0.5rem 0' }}>
                     Supported formats: PNG, JPG, WebP, GIF (max 10MB each)
+                  </p>
+                  <p style={{ fontSize: '0.8rem', color: '#22d3ee', margin: '0.5rem 0', padding: '8px', backgroundColor: '#164e63', borderRadius: '4px' }}>
+                    💾 <strong>Storage:</strong> Assets are saved to your local file system with unlimited capacity.
                   </p>
                 </div>
                 
@@ -852,3 +869,4 @@ function ImportAssetsDialog({ onClose }: { onClose: () => void }) {
     </div>
   )
 }
+

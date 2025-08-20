@@ -125,8 +125,7 @@ export class CircleTool implements Tool {
         state.eraseTile(point.x, point.y)
       } else {
         // Draw mode - place tiles
-        const tileType = state.selected === 'wall' ? 'wall' : 'floor'
-        setTile(state.currentLayer, point.x, point.y, tileType)
+        setTile(state.currentLayer, point.x, point.y, state.selected)
       }
     })
   }

@@ -1,82 +1,62 @@
 // Asset persistence service for user-imported assets
-// Handles saving/loading imported assets to localStorage (dev) or file system (Tauri)
+// Desktop-only storage using Tauri file system
 
 import type { Asset } from '../store'
 
-// Check if we're running in Tauri (desktop) or web development mode
+// Check if running in Tauri context
 const isTauriApp = () => {
-  const hasTauri = typeof window !== 'undefined' && (window as any).__TAURI__ !== undefined
-  console.log('Tauri detection:', { hasTauri, windowTauri: (window as any).__TAURI__ })
-  return hasTauri
+  return typeof window !== 'undefined' && '__TAURI__' in window
 }
 
-// Dynamic import of Tauri API to avoid errors in web mode
+// Dynamic import of Tauri API with error handling
 const getTauriInvoke = async () => {
   if (!isTauriApp()) {
-    throw new Error('Tauri API not available in web mode')
+    throw new Error('This application requires the desktop version to save assets. Please run the Tauri desktop app instead of the web browser version.')
   }
-  const { invoke } = await import('@tauri-apps/api/core')
-  return invoke
+  
+  try {
+    const { invoke } = await import('@tauri-apps/api/core')
+    return invoke
+  } catch (error) {
+    throw new Error('Failed to initialize desktop file system. Please ensure you are running the desktop application.')
+  }
 }
 
-const STORAGE_KEY = 'dungeon_imported_assets'
-
 /**
- * Load imported assets from persistent storage
+ * Load imported assets from file storage
  */
 export async function loadImportedAssets(): Promise<Asset[]> {
   try {
     if (!isTauriApp()) {
-      // In web mode, use localStorage
-      const assetsJson = localStorage.getItem(STORAGE_KEY)
-      if (!assetsJson) return []
-      return JSON.parse(assetsJson)
-    }
-    
-    // In Tauri mode, try to read from file
-    const invoke = await getTauriInvoke()
-    try {
-      const assetsJson = await invoke<string>('read_imported_assets')
-      return JSON.parse(assetsJson)
-    } catch (error) {
-      // File doesn't exist yet, return empty array
-      console.log('No imported assets file found, starting with empty list')
+      console.warn('Running in web mode - imported assets not available')
       return []
     }
+    
+    const invoke = await getTauriInvoke()
+    const assetsJson = await invoke<string>('read_imported_assets')
+    return JSON.parse(assetsJson)
   } catch (error) {
-    console.error('Failed to load imported assets:', error)
+    // File doesn't exist yet or other errors, return empty array
+    console.log('No imported assets file found, starting with empty list')
     return []
   }
 }
 
 /**
- * Save imported assets to persistent storage
+ * Save imported assets to file storage
  */
 export async function saveImportedAssets(assets: Asset[]): Promise<boolean> {
   try {
     const assetsJson = JSON.stringify(assets, null, 2)
-    console.log('Saving assets:', { count: assets.length, totalSize: assetsJson.length, isTauri: isTauriApp() })
+    console.log('Saving assets:', { count: assets.length, totalSize: assetsJson.length })
     
-    if (!isTauriApp()) {
-      // In web mode, use localStorage
-      try {
-        localStorage.setItem(STORAGE_KEY, assetsJson)
-        console.log('Imported assets saved to browser storage')
-        return true
-      } catch (storageError) {
-        console.error('LocalStorage error:', storageError)
-        throw storageError
-      }
-    }
-    
-    // In Tauri mode, save to file
     const invoke = await getTauriInvoke()
     await invoke<void>('write_imported_assets', { assetsData: assetsJson })
     console.log('Imported assets saved to file')
     return true
   } catch (error) {
     console.error('Failed to save imported assets:', error)
-    return false
+    throw new Error('Failed to save assets to file. Please check file permissions and disk space.')
   }
 }
 
@@ -134,12 +114,6 @@ export async function updateImportedAsset(assetId: string, updates: Partial<Asse
  */
 export async function clearImportedAssets(): Promise<boolean> {
   try {
-    if (!isTauriApp()) {
-      localStorage.removeItem(STORAGE_KEY)
-      console.log('All imported assets cleared from browser storage')
-      return true
-    }
-    
     const invoke = await getTauriInvoke()
     await invoke<void>('clear_imported_assets')
     console.log('All imported assets cleared from file')

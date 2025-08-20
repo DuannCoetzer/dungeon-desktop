@@ -6,13 +6,26 @@ import { Action } from './pages/Action'
 import AssetDesigner from './pages/AssetDesigner'
 import { IconBrand } from './assets'
 import { DragDropProvider } from './components/DragDropProvider'
+import SettingsMenu from './components/SettingsMenu'
+import { useWarpDistortion, useParchmentCreases } from './store/settingsStore'
 
 function App() {
+  const enableWarpDistortion = useWarpDistortion()
+  const enableParchmentCreases = useParchmentCreases()
+  
+  // Build dynamic class names based on settings
+  const appRootClasses = [
+    'app-root',
+    enableWarpDistortion && 'warp-distortion',
+    enableParchmentCreases && 'parchment-creases'
+  ].filter(Boolean).join(' ')
+  
   return (
     <DragDropProvider>
-      <div className="app-root">
+      <div className={appRootClasses}>
         <header className="app-header">
           <div className="brand">
+            <SettingsMenu />
             <img className="brand-logo" src={IconBrand} alt="" aria-hidden />
             <span className="brand-name">Dungeon Desktop</span>
           </div>

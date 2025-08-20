@@ -27,6 +27,30 @@ export default function Home() {
         </div>
       </section>
 
+      {/* Stats Section - Commented out for cleaner parchment look */}
+      {/*
+      <section className="stats-section">
+        <div className="stats-container">
+          <div className="stat-item">
+            <div className="stat-number" data-target="10000">0</div>
+            <div className="stat-label">Maps Created</div>
+          </div>
+          <div className="stat-item">
+            <div className="stat-number" data-target="250">0</div>
+            <div className="stat-label">Built-in Assets</div>
+          </div>
+          <div className="stat-item">
+            <div className="stat-number" data-target="50">0</div>
+            <div className="stat-label">Tile Types</div>
+          </div>
+          <div className="stat-item">
+            <div className="stat-number" data-target="99">0</div>
+            <div className="stat-label">Satisfaction %</div>
+          </div>
+        </div>
+      </section>
+      */}
+
       {/* Features Section */}
       <section className="features">
         <h2 className="section-title">Features</h2>

@@ -9,7 +9,7 @@ import {
   removeImportedAsset, 
   updateImportedAsset,
   clearImportedAssets,
-  isImportedAsset 
+  isImportedAsset
 } from '../services/assetPersistence'
 
 interface AssetState {
@@ -31,6 +31,7 @@ interface AssetState {
   clearAllImportedAssets: () => Promise<boolean>
   getAssetById: (assetId: string) => Asset | undefined
   getAssetsByType: (imported: boolean) => Asset[]
+  clearError: () => void
 }
 
 export const useAssetStore = create<AssetState>((set, get) => ({
@@ -108,14 +109,21 @@ export const useAssetStore = create<AssetState>((set, get) => ({
           const updatedImported = [...state.importedAssets, asset]
           return {
             importedAssets: updatedImported,
-            allAssets: [...state.defaultAssets, ...updatedImported]
+            allAssets: [...state.defaultAssets, ...updatedImported],
+            error: null // Clear any previous errors on success
           }
         })
         console.log('Asset added successfully:', asset.name)
+        return true
       }
-      return success
+      return false
     } catch (error) {
       console.error('Error adding asset:', error)
+      let errorMessage = 'Failed to save asset to file'
+      if (error instanceof Error) {
+        errorMessage = error.message
+      }
+      set({ error: errorMessage })
       return false
     }
   },
@@ -200,6 +208,11 @@ export const useAssetStore = create<AssetState>((set, get) => ({
   // Get assets by type (imported vs default)
   getAssetsByType: (imported: boolean) => {
     return imported ? get().importedAssets : get().defaultAssets
+  },
+  
+  // Clear error state
+  clearError: () => {
+    set({ error: null })
   }
 }))
 

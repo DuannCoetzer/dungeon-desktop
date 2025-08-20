@@ -45,31 +45,11 @@
       "timestampUrl": "http://timestamp.digicert.com",
       "tsp": false,
       "wix": {
-        "language": "en-US",
-        "template": "templates/main.wxs",
-        "fragmentPaths": [],
-        "componentGroupRefs": [],
-        "componentRefs": [],
-        "featureGroupRefs": [],
-        "featureRefs": [],
-        "mergeRefs": [],
-        "skipWebviewInstall": false,
-        "license": null,
-        "enableElevatedUpdateTask": false,
-        "bannerPath": null,
-        "dialogImagePath": null,
-        "fipsCompliant": false
+        "language": "en-US"
       },
       "nsis": {
-        "license": null,
-        "headerImage": null,
-        "sidebarImage": null,
-        "installerIcon": null,
         "installMode": "perMachine",
-        "languages": ["English"],
-        "displayLanguageSelector": false,
-        "customLanguageFiles": {},
-        "template": "templates/installer.nsi"
+        "languages": ["English"]
       }
     }
   }

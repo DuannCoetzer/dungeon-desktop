@@ -131,8 +131,7 @@ export class FreehandTool implements Tool {
         state.eraseTile(tile.x, tile.y)
       } else {
         // Draw mode - place tiles
-        const tileType = state.selected === 'wall' ? 'wall' : 'floor'
-        setTile(state.currentLayer, tile.x, tile.y, tileType)
+        setTile(state.currentLayer, tile.x, tile.y, state.selected)
       }
     })
   }
