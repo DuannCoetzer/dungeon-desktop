@@ -10,7 +10,7 @@ export interface VisibleTilesResult {
 }
 
 /**
- * Computes visible tiles for all characters using ray-casting
+ * Computes visible tiles for all characters using circular vision with line-of-sight
  */
 export function computeVisibleTiles(mapData: MapData, characters: CharacterToken[]): VisibleTilesResult {
   const visibleTiles = new Set<string>()
@@ -24,25 +24,24 @@ export function computeVisibleTiles(mapData: MapData, characters: CharacterToken
     const characterVisibleTiles = new Set<string>()
     const visionRange = character.visionRange || 8
     
-    // Always include the character's own position
-    const charKey = getTileKey(character.x, character.y)
-    characterVisibleTiles.add(charKey)
-    visibleTiles.add(charKey)
-    
-    // Cast rays in a circle around the character
-    const rayCount = Math.max(16, visionRange * 4) // More rays for larger vision ranges
-    
-    for (let i = 0; i < rayCount; i++) {
-      const angle = (i / rayCount) * Math.PI * 2
-      castRay(
-        character.x,
-        character.y,
-        angle,
-        visionRange,
-        wallTiles,
-        characterVisibleTiles,
-        visibleTiles
-      )
+    // Start with all tiles in circular range
+    for (let dx = -visionRange; dx <= visionRange; dx++) {
+      for (let dy = -visionRange; dy <= visionRange; dy++) {
+        const targetX = character.x + dx
+        const targetY = character.y + dy
+        const distance = Math.sqrt(dx * dx + dy * dy)
+        
+        // Only include tiles within the circular vision range
+        if (distance <= visionRange) {
+          const tileKey = getTileKey(targetX, targetY)
+          
+          // Check line of sight to this tile
+          if (hasLineOfSight(character.x, character.y, targetX, targetY, wallTiles)) {
+            characterVisibleTiles.add(tileKey)
+            visibleTiles.add(tileKey)
+          }
+        }
+      }
     }
     
     characterVision.set(character.id, characterVisibleTiles)
@@ -52,38 +51,44 @@ export function computeVisibleTiles(mapData: MapData, characters: CharacterToken
 }
 
 /**
- * Cast a single ray and mark visible tiles
+ * Check if there's a clear line of sight between two points
  */
-function castRay(
+function hasLineOfSight(
   startX: number,
   startY: number,
-  angle: number,
-  maxDistance: number,
-  wallTiles: TileMap,
-  characterVisibleTiles: Set<string>,
-  allVisibleTiles: Set<string>
-): void {
-  const dx = Math.cos(angle)
-  const dy = Math.sin(angle)
+  endX: number,
+  endY: number,
+  wallTiles: TileMap
+): boolean {
+  // If start and end are the same, always have line of sight
+  if (startX === endX && startY === endY) {
+    return true
+  }
   
-  // Step size for ray marching
-  const stepSize = 0.1
+  const dx = endX - startX
+  const dy = endY - startY
+  const distance = Math.sqrt(dx * dx + dy * dy)
   
-  for (let distance = stepSize; distance <= maxDistance; distance += stepSize) {
-    const x = Math.floor(startX + dx * distance)
-    const y = Math.floor(startY + dy * distance)
-    const tileKey = getTileKey(x, y)
+  // Normalize direction
+  const stepX = dx / distance
+  const stepY = dy / distance
+  
+  // Step size for line checking - smaller for more accuracy
+  const stepSize = 0.3
+  
+  // Check each step along the line
+  for (let step = stepSize; step < distance; step += stepSize) {
+    const checkX = Math.floor(startX + stepX * step)
+    const checkY = Math.floor(startY + stepY * step)
+    const tileKey = getTileKey(checkX, checkY)
     
-    // Mark this tile as visible
-    characterVisibleTiles.add(tileKey)
-    allVisibleTiles.add(tileKey)
-    
-    // Check if there's a wall at this position
+    // If there's a wall in the path, line of sight is blocked
     if (wallTiles[tileKey]) {
-      // Wall blocks further vision - stop casting this ray
-      break
+      return false
     }
   }
+  
+  return true
 }
 
 /**
