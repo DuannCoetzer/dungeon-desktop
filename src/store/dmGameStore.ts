@@ -210,6 +210,7 @@ export const useDMGameStore = create<DMGameState>()(
           isCharacterPanelCollapsed: state.isCharacterPanelCollapsed,
           isInfoPanelCollapsed: state.isInfoPanelCollapsed,
           measurementSettings: state.measurementSettings,
+          fogOfWarEnabled: state.fogOfWarEnabled,
           isActive: state.isActive,
           lastActiveAt: state.lastActiveAt
         }

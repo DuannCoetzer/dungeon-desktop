@@ -68,7 +68,7 @@ export function Action({}: ActionProps = {}) {
   // Character management handlers - create pending characters instead of placing immediately
   const handleAddCharacter = (character: { name: string; color: string; size: number; isVisible: boolean; avatarAssetId?: string; notes?: string }) => {
     // Add to pending characters instead of placing on map
-    dmGameStore.addPendingCharacter(character)
+    dmGameStore.addPendingCharacter({ ...character, visionRange: 8 })
   }
   
   const handlePlaceCharacter = (pendingCharacterId: string, x: number, y: number) => {

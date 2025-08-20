@@ -18,7 +18,7 @@ export function calculateRevealedFogTiles(mapData: MapData): Set<string> {
   for (const character of mapData.characters) {
     if (!character.isVisible) continue
     
-    const range = character.revealRange || 2 // Default reveal range of 2 tiles
+    const range = character.visionRange || 2 // Default reveal range of 2 tiles
     
     // Reveal tiles in a square around the character
     for (let dx = -range; dx <= range; dx++) {

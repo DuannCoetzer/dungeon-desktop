@@ -1,11 +1,11 @@
-import React, { useRef, useEffect, useState, useCallback } from 'react'
+import React, { useRef, useEffect, useState, useCallback, useMemo } from 'react'
 import { useDrop } from 'react-dnd'
 import type { MapData } from '../protocol'
 import type { PendingCharacter } from '../store/dmGameStore'
 import { useAssetStore } from '../store/assetStore'
 import { renderTile, preloadAllTileImages } from '../utils/tileRenderer'
 import type { Palette } from '../store'
-import { getVisibleFogTiles } from '../utils/fogReveal'
+import { computeVisibleTiles, parseTileKey } from '../utils/FOWCalculator'
 
 interface ActionMapViewerProps {
   mapData: MapData
@@ -131,6 +131,14 @@ export function ActionMapViewer({ mapData, onMoveCharacter, onPlaceCharacter, se
   const renderTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   // Persistent image cache to avoid reloading images on every render
   const imageCacheRef = useRef(new Map<string, HTMLImageElement>())
+  
+  // Memoized FOW calculation for performance
+  const fogOfWarData = useMemo(() => {
+    if (!fogOfWarEnabled || !mapData.characters) {
+      return { visibleTiles: new Set<string>(), characterVision: new Map<string, Set<string>>() }
+    }
+    return computeVisibleTiles(mapData, mapData.characters)
+  }, [fogOfWarEnabled, mapData.characters, mapData.tiles.walls])
   
   const renderMap = useCallback(async () => {
     const canvas = canvasRef.current
@@ -372,43 +380,56 @@ export function ActionMapViewer({ mapData, onMoveCharacter, onPlaceCharacter, se
       }
       
       // Render fog of war overlay before characters
-      if (fogOfWarEnabled) {
-        const visibleFogTiles = getVisibleFogTiles(mapData)
+      if (fogOfWarEnabled && mapData.characters && mapData.characters.length > 0) {
+        const { visibleTiles } = fogOfWarData
         
-        if (Object.keys(visibleFogTiles).length > 0) {
+        // Only render fog if there are actually walls or areas to hide
+        if (mapData.tiles.walls || mapData.tiles.floor) {
           ctx.save()
           
-          // Create fog overlay
-          ctx.fillStyle = 'rgba(0, 0, 0, 0.7)' // Semi-transparent black fog
+          // Create fog overlay for areas not visible to any character
+          ctx.fillStyle = 'rgba(0, 0, 0, 0.8)' // Semi-transparent black fog
           
-          for (const [tileKey, _] of Object.entries(visibleFogTiles)) {
-            const [x, y] = tileKey.split(',').map(Number)
-            
-            ctx.fillRect(
-              x * TILE_SIZE,
-              y * TILE_SIZE,
-              TILE_SIZE,
-              TILE_SIZE
-            )
+          // Get the bounds of the map to know where to render fog
+          const allTileKeys = [
+            ...Object.keys(mapData.tiles.floor || {}),
+            ...Object.keys(mapData.tiles.walls || {}),
+            ...Object.keys(mapData.tiles.objects || {})
+          ]
+          
+          // Render fog on all tiles that exist but are not visible
+          for (const tileKey of allTileKeys) {
+            if (!visibleTiles.has(tileKey)) {
+              const { x, y } = parseTileKey(tileKey)
+              
+              ctx.fillRect(
+                x * TILE_SIZE,
+                y * TILE_SIZE,
+                TILE_SIZE,
+                TILE_SIZE
+              )
+            }
           }
           
-          // Add subtle texture to fog
+          // Add subtle texture to fog for better visual appeal
           ctx.globalCompositeOperation = 'multiply'
-          ctx.fillStyle = 'rgba(50, 50, 80, 0.3)' // Slightly blue tint
+          ctx.fillStyle = 'rgba(40, 40, 60, 0.4)' // Slightly blue-gray tint
           
-          for (const [tileKey, _] of Object.entries(visibleFogTiles)) {
-            const [x, y] = tileKey.split(',').map(Number)
-            
-            // Add some noise for texture
-            const noise = Math.random() * 0.2 + 0.8
-            ctx.globalAlpha = noise
-            
-            ctx.fillRect(
-              x * TILE_SIZE,
-              y * TILE_SIZE,
-              TILE_SIZE,
-              TILE_SIZE
-            )
+          for (const tileKey of allTileKeys) {
+            if (!visibleTiles.has(tileKey)) {
+              const { x, y } = parseTileKey(tileKey)
+              
+              // Add some noise for texture
+              const noise = Math.random() * 0.3 + 0.7
+              ctx.globalAlpha = noise
+              
+              ctx.fillRect(
+                x * TILE_SIZE,
+                y * TILE_SIZE,
+                TILE_SIZE,
+                TILE_SIZE
+              )
+            }
           }
           
           ctx.restore()
@@ -695,7 +716,7 @@ export function ActionMapViewer({ mapData, onMoveCharacter, onPlaceCharacter, se
       // Always reset the rendering flag
       renderingRef.current = false
     }
-  }, [mapData, viewport, assetStore, measurementLines, currentMeasurement, measurementSettings, hoveredTile, isDraggingCharacter, isOver, fogOfWarEnabled])
+  }, [mapData, viewport, assetStore, measurementLines, currentMeasurement, measurementSettings, hoveredTile, isDraggingCharacter, isOver, fogOfWarEnabled, fogOfWarData])
 
   // Helper function to convert screen coordinates to world coordinates
   const screenToWorld = useCallback((screenX: number, screenY: number) => {
