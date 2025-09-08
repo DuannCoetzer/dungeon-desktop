@@ -74,7 +74,29 @@ export function ActionMapViewer({ mapData, onMoveCharacter, onPlaceCharacter, se
       })
       
       // Check if placement is valid (not on a wall without an object/asset)
-      if (!isValidCharacterPlacement(gridX, gridY)) {
+      const placementValid = isValidCharacterPlacement(gridX, gridY)
+      const tileKey = `${gridX},${gridY}`
+      const hasWallType = hasWallAtPosition(gridX, gridY)
+      
+      // Get tile types at this position for debugging
+      const floorTileType = mapData.tiles.floor?.[tileKey] || 'none'
+      const wallTileType = mapData.tiles.walls?.[tileKey] || 'none'
+      const objectTileType = mapData.tiles.objects?.[tileKey] || 'none'
+      
+      console.log('🔍 Character placement validation:', {
+        gridX, gridY,
+        valid: placementValid,
+        hasWallType,
+        tileTypes: {
+          floor: floorTileType,
+          wall: wallTileType,
+          object: objectTileType
+        },
+        hasObject: !!(mapData.tiles.objects && mapData.tiles.objects[tileKey]),
+        hasAsset: !!(mapData.assetInstances && mapData.assetInstances.some(asset => asset.x === gridX && asset.y === gridY))
+      })
+      
+      if (!placementValid) {
         console.log('❌ Invalid character placement: Cannot place character on wall tile without object/asset')
         return
       }
@@ -400,49 +422,50 @@ export function ActionMapViewer({ mapData, onMoveCharacter, onPlaceCharacter, se
         }
       }
       
-      // Render fog of war overlay before characters
+      // Render fog of war overlay after walls but before characters
       if (fogOfWarEnabled && mapData.characters && mapData.characters.length > 0) {
         const { visibleTiles } = fogOfWarData
         
-        // Only render fog if there are actually walls or areas to hide
-        if (mapData.tiles.walls || mapData.tiles.floor) {
+        console.log('🌫️ FOW Debug - Characters:', mapData.characters.length)
+        console.log('🌫️ FOW Debug - Visible tiles count:', visibleTiles.size)
+        console.log('🌫️ FOW Debug - Wall tiles:', Object.keys(mapData.tiles.walls || {}).length)
+        console.log('🌫️ FOW Debug - Floor tiles:', Object.keys(mapData.tiles.floor || {}).length)
+        
+        // Only render fog if there are actually areas to hide
+        if (mapData.tiles.floor || mapData.tiles.objects) {
           ctx.save()
           
-          // Create fog overlay for areas not visible to any character
-          ctx.fillStyle = 'rgba(0, 0, 0, 0.8)' // Semi-transparent black fog
+          // Set fog color - semi-transparent black
+          ctx.fillStyle = 'rgba(0, 0, 0, 0.75)' // Semi-transparent black fog
+          ctx.globalCompositeOperation = 'source-over' // Ensure we don't interfere with walls
           
-          // Get tiles that should be hidden by fog (floor and objects, but NOT walls)
-          const fogTileKeys = [
-            ...Object.keys(mapData.tiles.floor || {}),
-            ...Object.keys(mapData.tiles.objects || {})
-            // Walls are NOT included - they should remain visible even without line of sight
+          // Get all tiles and identify wall tiles by type (not just layer)
+          const allTiles = [
+            ...(mapData.tiles.floor ? Object.entries(mapData.tiles.floor) : []),
+            ...(mapData.tiles.walls ? Object.entries(mapData.tiles.walls) : []),
+            ...(mapData.tiles.objects ? Object.entries(mapData.tiles.objects) : [])
           ]
           
-          // Render fog on floor/object tiles that are not visible to any character
-          for (const tileKey of fogTileKeys) {
-            if (!visibleTiles.has(tileKey)) {
-              const { x, y } = parseTileKey(tileKey)
-              
-              ctx.fillRect(
-                x * TILE_SIZE,
-                y * TILE_SIZE,
-                TILE_SIZE,
-                TILE_SIZE
-              )
+          // Separate tiles into wall tiles and non-wall tiles
+          const wallTileKeys = new Set<string>()
+          const nonWallTileKeys = new Set<string>()
+          
+          for (const [tileKey, tileType] of allTiles) {
+            if (isWallTileType(tileType)) {
+              wallTileKeys.add(tileKey)
+            } else {
+              nonWallTileKeys.add(tileKey)
             }
           }
           
-          // Add subtle texture to fog for better visual appeal
-          ctx.globalCompositeOperation = 'multiply'
-          ctx.fillStyle = 'rgba(40, 40, 60, 0.4)' // Slightly blue-gray tint
+          console.log('🌫️ FOW Debug - Wall-type tiles found:', wallTileKeys.size)
+          console.log('🌫️ FOW Debug - Non-wall tiles to fog:', nonWallTileKeys.size)
+          console.log('🌫️ FOW Debug - Wall tile keys:', Array.from(wallTileKeys).slice(0, 10))
           
-          for (const tileKey of fogTileKeys) {
+          // Render fog ONLY on non-wall tiles that are not visible
+          for (const tileKey of nonWallTileKeys) {
             if (!visibleTiles.has(tileKey)) {
               const { x, y } = parseTileKey(tileKey)
-              
-              // Add some noise for texture
-              const noise = Math.random() * 0.3 + 0.7
-              ctx.globalAlpha = noise
               
               ctx.fillRect(
                 x * TILE_SIZE,
@@ -751,12 +774,41 @@ export function ActionMapViewer({ mapData, onMoveCharacter, onPlaceCharacter, se
     return { x, y }
   }, [viewport])
 
+  // Helper function to check if a tile type is a wall
+  const isWallTileType = useCallback((tileType: string) => {
+    const wallTypes = [
+      'wall', 'wall-brick', 'wall-stone', 'wall-wood',
+      'wall-cave', 'wall-metal', 'wall-rough', 'wall-smooth'
+    ]
+    return wallTypes.some(wallType => tileType.includes(wallType))
+  }, [])
+
+  // Helper function to check if there's a wall at a grid position (checking all layers)
+  const hasWallAtPosition = useCallback((gridX: number, gridY: number) => {
+    const tileKey = `${gridX},${gridY}`
+    
+    // Check all tile layers for wall-type tiles
+    const allTiles = [
+      ...(mapData.tiles.floor ? Object.entries(mapData.tiles.floor) : []),
+      ...(mapData.tiles.walls ? Object.entries(mapData.tiles.walls) : []),
+      ...(mapData.tiles.objects ? Object.entries(mapData.tiles.objects) : [])
+    ]
+    
+    for (const [key, tileType] of allTiles) {
+      if (key === tileKey && isWallTileType(tileType)) {
+        return true
+      }
+    }
+    
+    return false
+  }, [mapData.tiles, isWallTileType])
+  
   // Helper function to check if a grid position is valid for character placement
   const isValidCharacterPlacement = useCallback((gridX: number, gridY: number) => {
     const tileKey = `${gridX},${gridY}`
     
-    // Check if there's a wall at this position
-    const hasWall = mapData.tiles.walls && mapData.tiles.walls[tileKey]
+    // Check if there's a wall-type tile at this position (any layer)
+    const hasWall = hasWallAtPosition(gridX, gridY)
     
     // If there's no wall, placement is always valid
     if (!hasWall) {
@@ -771,7 +823,7 @@ export function ActionMapViewer({ mapData, onMoveCharacter, onPlaceCharacter, se
     
     // Character can be placed on a wall only if there's an object or asset there
     return !!(hasObject || hasAsset)
-  }, [mapData.tiles.walls, mapData.tiles.objects, mapData.assetInstances])
+  }, [hasWallAtPosition, mapData.tiles.objects, mapData.assetInstances])
 
   // Helper function to check if a point is inside a character token
   const getCharacterAtPoint = useCallback((worldX: number, worldY: number) => {
