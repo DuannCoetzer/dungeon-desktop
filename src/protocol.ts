@@ -328,6 +328,14 @@ export const mapProtocol = MapProtocol.getInstance()
 
 // High-level protocol functions
 export function setTile(layer: Layer, x: number, y: number, type: TileType): void {
+  // If placing a floor tile, remove any existing wall at that position first
+  if (layer === 'floor') {
+    const existingWall = mapProtocol.getTile('walls', x, y)
+    if (existingWall) {
+      mapProtocol.eraseTile('walls', x, y)
+    }
+  }
+  
   mapProtocol.setTile(layer, x, y, type)
 }
 

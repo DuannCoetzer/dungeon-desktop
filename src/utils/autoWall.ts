@@ -51,10 +51,31 @@ function isEmpty(x: number, y: number): boolean {
   return !floorTile && !wallTile
 }
 
-// Check if a position is suitable for wall placement (empty or has existing wall)
+// Check if a position is suitable for wall placement (empty spaces only, with obstruction checking)
 function canPlaceWall(x: number, y: number): boolean {
+  // Don't place walls where there are floor tiles (respect existing floors)
   const floorTile = getTileAt(x, y, 'floor')
-  return !floorTile // Can place wall if there's no floor (regardless of existing walls)
+  if (floorTile) {
+    return false // Cannot place wall where there's already a floor
+  }
+  
+  // Don't place walls where there are object tiles
+  const objectTile = getTileAt(x, y, 'objects')
+  if (objectTile) {
+    return false // Cannot place wall where there's an object
+  }
+  
+  // Don't place walls where there are assets
+  const mapData = useMapStore.getState().mapData
+  const hasAsset = mapData.assetInstances && mapData.assetInstances.some(asset => 
+    Math.floor(asset.x / 32) === x && Math.floor(asset.y / 32) === y
+  )
+  if (hasAsset) {
+    return false // Cannot place wall where there's an asset
+  }
+  
+  // Can place wall only in completely empty spaces
+  return true
 }
 
 // Get all connected floor positions using flood fill
@@ -140,8 +161,8 @@ export function placeWallsAroundFloor(
     : getAdjacentPositions(floorX, floorY)
 
   for (const pos of positions) {
-    // Only place walls in empty spots (no floor and no existing wall)
-    if (isEmpty(pos.x, pos.y)) {
+    // Only place walls in empty spaces (no floors, objects, or assets)
+    if (canPlaceWall(pos.x, pos.y)) {
       setTile('walls', pos.x, pos.y, wallType)
     }
   }
@@ -171,8 +192,8 @@ export function placeWallsAroundFloors(
     
     for (const pos of positions) {
       const posKey = `${pos.x},${pos.y}`
-      // Only add if it's not a floor position and is empty
-      if (!floorSet.has(posKey) && isEmpty(pos.x, pos.y)) {
+      // Only add if it's not a floor position and can place wall (no obstructions)
+      if (!floorSet.has(posKey) && canPlaceWall(pos.x, pos.y)) {
         wallPositions.add(posKey)
       }
     }

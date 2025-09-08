@@ -2,7 +2,7 @@ import type { Tool, PointerEventContext, RenderContext } from './Tool'
 import { useMapStore } from '../mapStore'
 import { useUIStore } from '../uiStore'
 import { setTile } from '../protocol'
-import { enhancedSmartAutoPlaceWallsForTiles } from '../utils/autoWall'
+import { smartAutoPlaceWallsForTiles } from '../utils/autoWall'
 import type { Palette } from '../store'
 
 export class RectTool implements Tool {
@@ -105,9 +105,9 @@ export class RectTool implements Tool {
       }
     }
     
-    // Auto-place walls for all floor tiles in the rectangle
+    // Auto-place walls for all floor tiles in the rectangle (simple mode - only around the drawn tiles)
     if (tilePositions.length > 0) {
-      enhancedSmartAutoPlaceWallsForTiles(tilePositions, uiState.autoWallSettings)
+      smartAutoPlaceWallsForTiles(tilePositions, uiState.autoWallSettings)
     }
   }
 }
