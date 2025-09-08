@@ -66,13 +66,27 @@ export default function Game() {
 
 
   // Handle asset drop on canvas
-  const [{ isOver }, drop] = useDrop(() => ({
+  const [{ isOver, canDrop }, drop] = useDrop(() => ({
     accept: 'asset',
+    canDrop: () => {
+      console.log('✅ Can drop asset on canvas')
+      return true
+    },
     drop: (item: { asset: Asset }, monitor) => {
+      console.log('🎯 Asset drop received:', item.asset.name)
+      console.log('🎯 Drop monitor info:', {
+        canDrop: monitor.canDrop(),
+        isOver: monitor.isOver(),
+        didDrop: monitor.didDrop()
+      })
+      
       const canvasRect = canvasRef.current?.getBoundingClientRect()
       const clientOffset = monitor.getClientOffset()
       
-      if (!canvasRect || !clientOffset) return
+      if (!canvasRect || !clientOffset) {
+        console.log('⚠️ Drop failed: no canvas rect or client offset')
+        return
+      }
       
       const x = clientOffset.x - canvasRect.left
       const y = clientOffset.y - canvasRect.top
@@ -110,14 +124,83 @@ export default function Game() {
         gridHeight,
       }
       
+      console.log('✅ Asset instance created:', newAssetInstance)
       addAssetInstance(newAssetInstance)
+      return { success: true } // Return success result to drag source
+    },
+    hover: (item, monitor) => {
+      console.log('🔍 Asset hovering over drop zone:', item.asset.name)
     },
     collect: (monitor) => ({
       isOver: !!monitor.isOver(),
+      canDrop: !!monitor.canDrop(),
     }),
   }), [cameraTransform, addAssetInstance])
+  
+  // Add custom drop event listener for native asset drag in desktop mode
+  useEffect(() => {
+    const handleCustomAssetDrop = (e: CustomEvent) => {
+      console.log('🎯 Custom asset drop event received:', e.detail)
+      
+      const { asset, clientX, clientY } = e.detail
+      const canvas = canvasRef.current
+      
+      if (!canvas) {
+        console.log('⚠️ No canvas found for custom asset drop')
+        return
+      }
+      
+      const canvasRect = canvas.getBoundingClientRect()
+      const x = clientX - canvasRect.left
+      const y = clientY - canvasRect.top
+      
+      // Use current camera transform values directly
+      const { scale, offsetX, offsetY } = cameraTransform
+      
+      // Convert screen position to world position
+      const worldX = (x - offsetX) / (TILE * scale)
+      const worldY = (y - offsetY) / (TILE * scale)
+      
+      // Snap to grid if enabled
+      const { isSnapToGrid } = useUIStore.getState()
+      const snappedX = isSnapToGrid ? Math.round(worldX) : worldX
+      const snappedY = isSnapToGrid ? Math.round(worldY) : worldY
+      
+      // Use grid dimensions from asset
+      const gridWidth = asset.gridWidth || 1
+      const gridHeight = asset.gridHeight || 1
+      
+      // Calculate the actual size based on grid dimensions
+      const actualWidth = TILE * gridWidth
+      const actualHeight = TILE * gridHeight
+      
+      // Create new asset instance
+      const newAssetInstance: AssetInstance = {
+        id: `asset_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        assetId: asset.id,
+        x: snappedX,
+        y: snappedY,
+        width: actualWidth,
+        height: actualHeight,
+        rotation: 0,
+        gridWidth,
+        gridHeight,
+      }
+      
+      console.log('✅ Custom asset instance created:', newAssetInstance)
+      addAssetInstance(newAssetInstance)
+    }
+    
+    const stageElement = document.querySelector('.stage')
+    if (stageElement) {
+      stageElement.addEventListener('asset-drop', handleCustomAssetDrop as EventListener)
+      return () => {
+        stageElement.removeEventListener('asset-drop', handleCustomAssetDrop as EventListener)
+      }
+    }
+  }, [cameraTransform, addAssetInstance])
 
-  // Update drag transform whenever camera changes  
+  // Update drag transform whenever camera changes
   useEffect(() => {
     setDragTransform(cameraTransform)
   }, [cameraTransform])
@@ -890,16 +973,18 @@ export default function Game() {
       </div>
 
       {/* Canvas */}
-      <div className="stage" ref={drop as any}>
+      <div className="stage" ref={drop}>
         <canvas 
           ref={(ref) => {
             canvasRef.current = ref
             stageRef.current = ref?.parentElement as HTMLElement
-          }} 
+          }}
           className="canvas"
           style={{ 
-            backgroundColor: isOver ? 'rgba(0, 122, 204, 0.1)' : 'transparent'
-          }} 
+            backgroundColor: isOver ? 'rgba(0, 122, 204, 0.2)' : 'transparent',
+            border: isOver ? '2px dashed #007acc' : 'none',
+            transition: 'all 0.2s ease'
+          }}
         />
         {/* Asset instances overlay */}
         <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none' }}>

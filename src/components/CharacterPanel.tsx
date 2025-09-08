@@ -32,37 +32,121 @@ const DEFAULT_COLORS = [
 ]
 
 // Draggable pending character component
+// Check if running in Tauri desktop app
+const isTauriApp = () => {
+  if (typeof window === 'undefined') return false
+  const hasTauri = '__TAURI__' in window
+  const hasTauriInvoke = '__TAURI_INTERNALS__' in window
+  const hasTauriLocation = window.location.protocol === 'tauri:' || window.location.hostname === 'tauri.localhost'
+  return hasTauri || hasTauriInvoke || hasTauriLocation
+}
+
 function DraggablePendingCharacter({ character, onRemove }: { 
   character: PendingCharacter
   onRemove: (id: string) => void 
 }) {
   const assetStore = useAssetStore()
+  const [isDragging, setIsDragging] = useState(false)
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0 })
   
-  const [{ isDragging }, drag] = useDrag({
+  // Use native drag for Tauri, react-dnd for web
+  const isDesktop = isTauriApp()
+  
+  // Native drag handlers for desktop
+  const handleMouseDown = (e: React.MouseEvent) => {
+    if (!isDesktop) return // Let react-dnd handle it in web mode
+    
+    e.preventDefault() // Prevent any default drag behavior
+    
+    console.log('🟢 Native drag started for character:', character.name)
+    setIsDragging(true)
+    setDragStart({ x: e.clientX, y: e.clientY })
+    
+    // Add global mouse handlers
+    const handleMouseMove = (e: MouseEvent) => {
+      // Update drag position or show visual feedback
+      document.body.style.cursor = 'grabbing'
+    }
+    
+    const handleMouseUp = (e: MouseEvent) => {
+      console.log('🎯 Native drag ended for character:', character.name)
+      setIsDragging(false)
+      document.body.style.cursor = 'default'
+      
+      // Find drop target
+      const dropTarget = document.elementFromPoint(e.clientX, e.clientY)
+      if (dropTarget) {
+        // Check if drop target is the map canvas or its container
+        const mapContainer = dropTarget.closest('[data-drop-zone="map"]')
+        if (mapContainer) {
+          // Trigger custom drop event
+          const dropEvent = new CustomEvent('character-drop', {
+            detail: {
+              character,
+              clientX: e.clientX,
+              clientY: e.clientY,
+              target: mapContainer
+            }
+          })
+          mapContainer.dispatchEvent(dropEvent)
+          console.log('✅ Native drop completed for character:', character.name)
+        } else {
+          console.log('❌ Native drop cancelled - not over valid drop zone')
+        }
+      }
+      
+      // Remove global handlers
+      document.removeEventListener('mousemove', handleMouseMove)
+      document.removeEventListener('mouseup', handleMouseUp)
+    }
+    
+    document.addEventListener('mousemove', handleMouseMove)
+    document.addEventListener('mouseup', handleMouseUp)
+  }
+  
+  // Fallback to react-dnd for web mode
+  const [{ isDragging: webIsDragging }, webDrag] = useDrag({
     type: 'pending-character',
-    item: { character },
+    item: () => {
+      console.log('🟢 Web drag started for character:', character.name)
+      return { character }
+    },
     collect: (monitor) => ({
       isDragging: !!monitor.isDragging(),
     }),
-  })
+    end: (item, monitor) => {
+      const result = monitor.getDropResult()
+      if (result) {
+        console.log('✅ Web drag completed successfully for character:', character.name)
+      } else {
+        console.log('❌ Web drag cancelled for character:', character.name)
+      }
+    }
+  }, [character])
 
+  // Determine which drag state and ref to use
+  const currentIsDragging = isDesktop ? isDragging : webIsDragging
+  const dragRef = isDesktop ? null : webDrag
+  
   return (
     <div
-      ref={drag}
+      ref={dragRef as any}
+      onMouseDown={isDesktop ? handleMouseDown : undefined}
       style={{
         padding: '8px',
         marginBottom: '6px',
         backgroundColor: '#0d1117',
         border: '2px dashed #3b82f6',
         borderRadius: '4px',
-        cursor: 'grab',
+        cursor: currentIsDragging ? 'grabbing' : 'grab',
         display: 'flex',
         alignItems: 'center',
         gap: '8px',
-        opacity: isDragging ? 0.5 : 1,
-        transition: 'opacity 0.2s'
+        opacity: currentIsDragging ? 0.5 : 1,
+        transition: 'opacity 0.2s',
+        userSelect: 'none' // Prevent text selection during drag
       }}
-      title="Drag to map to place character"
+      title={isDesktop ? "Click and drag to map to place character" : "Drag to map to place character"}
     >
       <div
         style={{

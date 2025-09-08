@@ -24,7 +24,14 @@ const DEFAULT_CATEGORIES: AssetCategory[] = [
 
 // Check if running in Tauri desktop app
 const isTauriApp = () => {
-  return typeof window !== 'undefined' && '__TAURI__' in window
+  if (typeof window === 'undefined') return false
+  
+  // Multiple ways to detect Tauri environment
+  const hasTauri = '__TAURI__' in window
+  const hasTauriInvoke = '__TAURI_INTERNALS__' in window
+  const hasTauriLocation = window.location.protocol === 'tauri:' || window.location.hostname === 'tauri.localhost'
+  
+  return hasTauri || hasTauriInvoke || hasTauriLocation
 }
 
 export default function AssetDesigner() {

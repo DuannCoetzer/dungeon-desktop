@@ -6,5 +6,6 @@ interface DragDropProviderProps {
 }
 
 export function DragDropProvider({ children }: DragDropProviderProps) {
+  console.log('🔄 DragDropProvider initialized with HTML5Backend')
   return <DndProvider backend={HTML5Backend}>{children}</DndProvider>
 }

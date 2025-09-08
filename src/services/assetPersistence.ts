@@ -3,9 +3,35 @@
 
 import type { Asset } from '../store'
 
-// Check if running in Tauri context
+// Check if running in Tauri context with improved detection
 const isTauriApp = () => {
-  return typeof window !== 'undefined' && '__TAURI__' in window
+  if (typeof window === 'undefined') return false
+  
+  // Multiple ways to detect Tauri environment
+  const hasTauri = '__TAURI__' in window
+  const hasTauriInvoke = '__TAURI_INTERNALS__' in window
+  const hasTauriLocation = window.location.protocol === 'tauri:' || window.location.hostname === 'tauri.localhost'
+  
+  const isTauri = hasTauri || hasTauriInvoke || hasTauriLocation
+  
+  if (isTauri) {
+    console.log('✅ Desktop mode detected:', {
+      hasTauri,
+      hasTauriInvoke,
+      hasTauriLocation,
+      protocol: window.location.protocol,
+      hostname: window.location.hostname,
+      userAgent: navigator.userAgent.includes('tauri')
+    })
+  } else {
+    console.log('🌐 Web mode detected:', {
+      protocol: window.location.protocol,
+      hostname: window.location.hostname,
+      hasTauri: false
+    })
+  }
+  
+  return isTauri
 }
 
 // Dynamic import of Tauri API with error handling

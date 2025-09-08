@@ -5,7 +5,14 @@ import { serializeMap, deserializeMap } from '../protocol'
 
 // Check if we're running in Tauri (desktop) or web development mode
 const isTauriApp = () => {
-  return typeof window !== 'undefined' && (window as any).__TAURI__ !== undefined
+  if (typeof window === 'undefined') return false
+  
+  // Multiple ways to detect Tauri environment
+  const hasTauri = '__TAURI__' in window
+  const hasTauriInvoke = '__TAURI_INTERNALS__' in window
+  const hasTauriLocation = window.location.protocol === 'tauri:' || window.location.hostname === 'tauri.localhost'
+  
+  return hasTauri || hasTauriInvoke || hasTauriLocation
 }
 
 // Dynamic import of Tauri API to avoid errors in web mode

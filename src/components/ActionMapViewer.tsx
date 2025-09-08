@@ -39,12 +39,20 @@ export function ActionMapViewer({ mapData, onMoveCharacter, onPlaceCharacter, se
   const [{ isOver }, drop] = useDrop({
     accept: 'pending-character',
     drop: (item: { character: PendingCharacter }, monitor) => {
-      if (!onPlaceCharacter) return
+      console.log('🎯 Drop detected for character:', item.character.name)
+      
+      if (!onPlaceCharacter) {
+        console.log('⚠️ No onPlaceCharacter handler provided')
+        return
+      }
       
       const clientOffset = monitor.getClientOffset()
       const canvas = canvasRef.current
       
-      if (!clientOffset || !canvas) return
+      if (!clientOffset || !canvas) {
+        console.log('⚠️ Missing client offset or canvas')
+        return
+      }
       
       const rect = canvas.getBoundingClientRect()
       const canvasX = clientOffset.x - rect.left
@@ -58,14 +66,27 @@ export function ActionMapViewer({ mapData, onMoveCharacter, onPlaceCharacter, se
       const gridX = Math.floor(worldX / TILE_SIZE)
       const gridY = Math.floor(worldY / TILE_SIZE)
       
+      console.log('🗺 Calculated drop position:', {
+        screen: { x: clientOffset.x, y: clientOffset.y },
+        canvas: { x: canvasX, y: canvasY },
+        world: { x: worldX, y: worldY },
+        grid: { x: gridX, y: gridY }
+      })
+      
       // Check if placement is valid (not on a wall without an object/asset)
       if (!isValidCharacterPlacement(gridX, gridY)) {
-        console.log('Invalid character placement: Cannot place character on wall tile without object/asset')
+        console.log('❌ Invalid character placement: Cannot place character on wall tile without object/asset')
         return
       }
       
       // Place the character
+      console.log('✅ Placing character:', item.character.name, 'at position:', gridX, gridY)
       onPlaceCharacter(item.character.id, gridX, gridY)
+      return { success: true } // Return success result
+    },
+    hover: (item: { character: PendingCharacter }, monitor) => {
+      // Optional: Add visual feedback during hover
+      console.log('🔍 Hovering over drop zone with character:', item.character.name)
     },
     collect: (monitor) => ({
       isOver: !!monitor.isOver(),
@@ -390,15 +411,15 @@ export function ActionMapViewer({ mapData, onMoveCharacter, onPlaceCharacter, se
           // Create fog overlay for areas not visible to any character
           ctx.fillStyle = 'rgba(0, 0, 0, 0.8)' // Semi-transparent black fog
           
-          // Get the bounds of the map to know where to render fog
-          const allTileKeys = [
+          // Get tiles that should be hidden by fog (floor and objects, but NOT walls)
+          const fogTileKeys = [
             ...Object.keys(mapData.tiles.floor || {}),
-            ...Object.keys(mapData.tiles.walls || {}),
             ...Object.keys(mapData.tiles.objects || {})
+            // Walls are NOT included - they should remain visible even without line of sight
           ]
           
-          // Render fog on all tiles that exist but are not visible
-          for (const tileKey of allTileKeys) {
+          // Render fog on floor/object tiles that are not visible to any character
+          for (const tileKey of fogTileKeys) {
             if (!visibleTiles.has(tileKey)) {
               const { x, y } = parseTileKey(tileKey)
               
@@ -415,7 +436,7 @@ export function ActionMapViewer({ mapData, onMoveCharacter, onPlaceCharacter, se
           ctx.globalCompositeOperation = 'multiply'
           ctx.fillStyle = 'rgba(40, 40, 60, 0.4)' // Slightly blue-gray tint
           
-          for (const tileKey of allTileKeys) {
+          for (const tileKey of fogTileKeys) {
             if (!visibleTiles.has(tileKey)) {
               const { x, y } = parseTileKey(tileKey)
               
@@ -749,7 +770,7 @@ export function ActionMapViewer({ mapData, onMoveCharacter, onPlaceCharacter, se
     )
     
     // Character can be placed on a wall only if there's an object or asset there
-    return hasObject || hasAsset
+    return !!(hasObject || hasAsset)
   }, [mapData.tiles.walls, mapData.tiles.objects, mapData.assetInstances])
 
   // Helper function to check if a point is inside a character token
@@ -1131,12 +1152,70 @@ export function ActionMapViewer({ mapData, onMoveCharacter, onPlaceCharacter, se
     }
   }, [renderMap])
 
-  return (
+    // Add custom drop event listener for native drag in desktop mode
+    useEffect(() => {
+      const handleCustomDrop = (e: CustomEvent) => {
+        console.log('🎯 Custom drop event received:', e.detail)
+        
+        if (!onPlaceCharacter) {
+          console.log('⚠️ No onPlaceCharacter handler provided')
+          return
+        }
+        
+        const { character, clientX, clientY } = e.detail
+        const canvas = canvasRef.current
+        
+        if (!canvas) {
+          console.log('⚠️ No canvas found')
+          return
+        }
+        
+        const rect = canvas.getBoundingClientRect()
+        const canvasX = clientX - rect.left
+        const canvasY = clientY - rect.top
+        
+        // Convert screen coordinates to world coordinates
+        const worldX = (canvasX - viewport.x) / viewport.scale
+        const worldY = (canvasY - viewport.y) / viewport.scale
+        
+        // Convert to grid coordinates
+        const gridX = Math.floor(worldX / TILE_SIZE)
+        const gridY = Math.floor(worldY / TILE_SIZE)
+        
+        console.log('🗺 Custom drop calculated position:', {
+          screen: { x: clientX, y: clientY },
+          canvas: { x: canvasX, y: canvasY },
+          world: { x: worldX, y: worldY },
+          grid: { x: gridX, y: gridY }
+        })
+        
+        // Check if placement is valid
+        if (!isValidCharacterPlacement(gridX, gridY)) {
+          console.log('❌ Invalid character placement at custom drop location')
+          return
+        }
+        
+        // Place the character
+        console.log('✅ Placing character from custom drop:', character.name, 'at position:', gridX, gridY)
+        onPlaceCharacter(character.id, gridX, gridY)
+      }
+      
+      const container = containerRef.current
+      if (container) {
+        container.addEventListener('character-drop', handleCustomDrop as EventListener)
+        return () => {
+          container.removeEventListener('character-drop', handleCustomDrop as EventListener)
+        }
+      }
+    }, [onPlaceCharacter, viewport, isValidCharacterPlacement])
+    
+    return (
     <div 
       ref={(el) => {
         containerRef.current = el;
         drop(el);
       }}
+      data-drop-zone="map"
       style={{ 
         width: '100%', 
         height: '100%', 

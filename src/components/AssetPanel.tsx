@@ -6,38 +6,118 @@ import { isImportedAsset } from '../services/assetPersistence'
 import { useMapStore, useSelectedAssetForPlacement } from '../mapStore'
 
 // Individual draggable asset item
+// Check if running in Tauri desktop app
+const isTauriApp = () => {
+  if (typeof window === 'undefined') return false
+  const hasTauri = '__TAURI__' in window
+  const hasTauriInvoke = '__TAURI_INTERNALS__' in window
+  const hasTauriLocation = window.location.protocol === 'tauri:' || window.location.hostname === 'tauri.localhost'
+  return hasTauri || hasTauriInvoke || hasTauriLocation
+}
+
 function AssetItem({ asset, onDelete, onSelect, isSelected }: { 
   asset: Asset; 
   onDelete?: (assetId: string) => void;
   onSelect?: (assetId: string) => void;
   isSelected?: boolean;
 }) {
-  const [{ isDragging }, drag] = useDrag(() => ({
+  const [isDragging, setIsDragging] = useState(false)
+  const isDesktop = isTauriApp()
+  
+  // Native drag handlers for desktop
+  const handleMouseDown = (e: React.MouseEvent) => {
+    if (!isDesktop) return // Let react-dnd handle it in web mode
+    
+    e.preventDefault() // Prevent any default drag behavior
+    
+    console.log('🟢 Native asset drag started:', asset.name)
+    setIsDragging(true)
+    
+    // Add global mouse handlers
+    const handleMouseMove = (e: MouseEvent) => {
+      document.body.style.cursor = 'grabbing'
+    }
+    
+    const handleMouseUp = (e: MouseEvent) => {
+      console.log('🎯 Native asset drag ended:', asset.name)
+      setIsDragging(false)
+      document.body.style.cursor = 'default'
+      
+      // Find drop target
+      const dropTarget = document.elementFromPoint(e.clientX, e.clientY)
+      if (dropTarget) {
+        // Check if drop target is the map canvas or its container
+        const mapContainer = dropTarget.closest('.stage')
+        if (mapContainer) {
+          // Trigger custom drop event
+          const dropEvent = new CustomEvent('asset-drop', {
+            detail: {
+              asset,
+              clientX: e.clientX,
+              clientY: e.clientY,
+              target: mapContainer
+            }
+          })
+          mapContainer.dispatchEvent(dropEvent)
+          console.log('✅ Native asset drop completed:', asset.name)
+        } else {
+          console.log('❌ Native asset drop cancelled - not over valid drop zone')
+        }
+      }
+      
+      // Remove global handlers
+      document.removeEventListener('mousemove', handleMouseMove)
+      document.removeEventListener('mouseup', handleMouseUp)
+    }
+    
+    document.addEventListener('mousemove', handleMouseMove)
+    document.addEventListener('mouseup', handleMouseUp)
+  }
+  
+  // Fallback to react-dnd for web mode
+  const [{ isDragging: webIsDragging }, webDrag] = useDrag(() => ({
     type: 'asset',
-    item: { asset },
+    item: () => {
+      console.log('🟢 Web asset drag started:', asset.name)
+      return { asset }
+    },
     collect: (monitor) => ({
       isDragging: !!monitor.isDragging(),
     }),
-  }))
+    end: (item, monitor) => {
+      const result = monitor.getDropResult()
+      if (result) {
+        console.log('✅ Web asset drop completed:', asset.name)
+      } else {
+        console.log('❌ Web asset drag cancelled:', asset.name)
+      }
+    }
+  }), [asset])
   
   const [showDelete, setShowDelete] = useState(false)
   const canDelete = isImportedAsset(asset.id) && onDelete
+  
+  // Determine which drag state and ref to use
+  const currentIsDragging = isDesktop ? isDragging : webIsDragging
+  const dragRef = isDesktop ? null : webDrag
 
   return (
     <div
-      ref={drag as any}
+      ref={dragRef as any}
       className="asset-item"
       onClick={() => onSelect?.(asset.id)}
+      onMouseDown={isDesktop ? handleMouseDown : undefined}
       style={{
         padding: '8px',
         border: isSelected ? '2px solid #7c8cff' : '1px solid #444',
         borderRadius: '4px',
-        cursor: 'pointer',
-        opacity: isDragging ? 0.5 : 1,
+        cursor: currentIsDragging ? 'grabbing' : 'pointer',
+        opacity: currentIsDragging ? 0.5 : 1,
         textAlign: 'center',
         backgroundColor: isSelected ? '#2a2a3a' : '#1a1a1a',
         transition: 'all 0.2s',
         position: 'relative',
+        userSelect: 'none'
       }}
       onMouseEnter={() => setShowDelete(!!canDelete)}
       onMouseLeave={() => setShowDelete(false)}
