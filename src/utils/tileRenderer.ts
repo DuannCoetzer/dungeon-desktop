@@ -139,69 +139,108 @@ export function renderTileWithBlending(
   tiles: Record<Layer, TileMap>,
   layer: Layer = 'floor'
 ): boolean {
-  // First render the base tile
-  const baseRendered = renderTile(ctx, palette, x, y, size)
-  
-  // Analyze blending requirements
+  // Analyze blending requirements first
   const blendInfo = analyzeTileBlending(tileX, tileY, tiles, layer)
   
+  // If no blending needed, use regular rendering
   if (!blendInfo || blendInfo.blends.length === 0) {
-    return baseRendered // No blending needed
+    return renderTile(ctx, palette, x, y, size)
   }
   
-  // Create an off-screen canvas for blend compositing
-  const blendCanvas = document.createElement('canvas')
-  blendCanvas.width = size
-  blendCanvas.height = size
-  const blendCtx = blendCanvas.getContext('2d')!
+  console.log(`Blending tile ${palette} at (${tileX},${tileY}) with ${blendInfo.blends.length} neighbors`)
   
-  // Draw base tile to blend canvas
+  // Get the base tile image
   const baseImg = getCachedTileImage(palette)
-  if (baseImg) {
-    blendCtx.drawImage(baseImg, 0, 0, size, size)
-  } else {
-    // Fallback color
-    blendCtx.fillStyle = getTileFallbackColor(palette)
-    blendCtx.fillRect(0, 0, size, size)
+  if (!baseImg) {
+    console.warn('Base tile image not found for:', palette)
+    return renderTile(ctx, palette, x, y, size) // Fallback
   }
   
-  // Apply blends for each neighboring tile that should blend over this one
+  // Save context state
+  ctx.save()
+  
+  // First, render the base tile normally
+  ctx.drawImage(baseImg, x, y, size, size)
+  
+  // Apply each blend
   for (const blend of blendInfo.blends) {
     const neighborImg = getCachedTileImage(blend.neighborTile)
     
     if (!neighborImg) {
-      continue // Skip if neighbor image not loaded
+      console.warn('Neighbor tile image not found for:', blend.neighborTile)
+      continue
     }
     
-    // Get blend mask for this direction and strength
-    const blendMask = getCachedBlendMask(
-      blend.direction,
-      blend.blendStrength,
-      size
-    )
+    console.log(`  Blending with ${blend.neighborTile} from ${blend.direction} (strength: ${blend.blendStrength})`)
     
-    // Create temporary canvas for masked neighbor tile
-    const maskCanvas = document.createElement('canvas')
-    maskCanvas.width = size
-    maskCanvas.height = size
-    const maskCtx = maskCanvas.getContext('2d')!
+    // Create a simple gradient mask for now (debugging)
+    const gradient = createSimpleBlendGradient(ctx, blend.direction, x, y, size)
+    
+    // Save state for this blend
+    ctx.save()
+    
+    // Set up clipping with gradient
+    ctx.globalCompositeOperation = 'source-over'
+    ctx.fillStyle = gradient
+    ctx.globalAlpha = blend.blendStrength * 0.5 // Make blend more subtle
+    
+    // Draw the neighbor tile with the gradient mask
+    const tempCanvas = document.createElement('canvas')
+    tempCanvas.width = size
+    tempCanvas.height = size
+    const tempCtx = tempCanvas.getContext('2d')!
     
     // Draw neighbor tile
-    maskCtx.drawImage(neighborImg, 0, 0, size, size)
+    tempCtx.drawImage(neighborImg, 0, 0, size, size)
     
-    // Apply mask using composite operation
-    maskCtx.globalCompositeOperation = 'destination-in'
-    maskCtx.drawImage(blendMask, 0, 0, size, size)
+    // Apply gradient mask
+    tempCtx.globalCompositeOperation = 'destination-in'
+    tempCtx.fillStyle = gradient
+    tempCtx.fillRect(0, 0, size, size)
     
-    // Composite the masked neighbor onto the blend canvas
-    blendCtx.globalCompositeOperation = 'source-over'
-    blendCtx.drawImage(maskCanvas, 0, 0, size, size)
+    // Draw the masked result
+    ctx.drawImage(tempCanvas, x, y, size, size)
+    
+    ctx.restore()
   }
   
-  // Draw the final blended result to the main canvas
-  ctx.drawImage(blendCanvas, x, y, size, size)
+  ctx.restore()
+  return true
+}
+
+// Simple gradient for debugging blends
+function createSimpleBlendGradient(
+  ctx: CanvasRenderingContext2D,
+  direction: string,
+  x: number,
+  y: number,
+  size: number
+): CanvasGradient {
+  let gradient: CanvasGradient
   
-  return baseRendered
+  switch (direction) {
+    case 'north':
+      gradient = ctx.createLinearGradient(0, 0, 0, size)
+      break
+    case 'south':
+      gradient = ctx.createLinearGradient(0, size, 0, 0)
+      break
+    case 'east':
+      gradient = ctx.createLinearGradient(size, 0, 0, 0)
+      break
+    case 'west':
+      gradient = ctx.createLinearGradient(0, 0, size, 0)
+      break
+    default:
+      gradient = ctx.createLinearGradient(0, 0, size, size)
+      break
+  }
+  
+  gradient.addColorStop(0, 'rgba(255, 255, 255, 1)')
+  gradient.addColorStop(0.5, 'rgba(255, 255, 255, 0.5)')
+  gradient.addColorStop(1, 'rgba(255, 255, 255, 0)')
+  
+  return gradient
 }
 
 // Fallback colors for tiles when images aren't loaded

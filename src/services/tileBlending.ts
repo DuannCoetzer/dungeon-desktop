@@ -148,10 +148,14 @@ export function analyzeTileBlending(
     // Skip if tiles are the same
     if (baseTile === neighborTile) continue
     
+    console.log(`Checking blend: ${baseTile} vs ${neighborTile} (${dir})`)
+    
     // Check if tiles can blend
     if (canTilesBlend(baseTile, neighborTile)) {
       const basePriority = getTileBlendPriority(baseTile)
       const neighborPriority = getTileBlendPriority(neighborTile)
+      
+      console.log(`  Can blend! Base priority: ${basePriority}, Neighbor priority: ${neighborPriority}`)
       
       // Only blend if neighbor has higher priority (neighbor dominates)
       if (neighborPriority > basePriority) {
@@ -160,12 +164,18 @@ export function analyzeTileBlending(
         const maxPriorityDiff = 10 // Reasonable max difference
         const blendStrength = Math.min(priorityDiff / maxPriorityDiff, 1.0)
         
+        console.log(`  Adding blend: ${dir} with strength ${blendStrength}`)
+        
         blends.push({
           direction: dir,
           neighborTile,
           blendStrength
         })
+      } else {
+        console.log(`  Skipping: neighbor priority not higher`)
       }
+    } else {
+      console.log(`  Cannot blend these tile types`)
     }
   }
   
