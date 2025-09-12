@@ -2,7 +2,6 @@
 // Creates seamless blends by analyzing adjacent tiles and applying edge masks
 
 import type { Palette, Layer, TileMap } from '../store'
-import { BlendDirection } from './tileBlendingTypes'
 import { useTileStore } from '../store/tileStore'
 // Direction constants for edge detection
 export const BlendDirection = {
@@ -199,34 +198,37 @@ export function analyzeTileBlending(
     // Skip if tiles are the same
     if (baseTile === neighborTile) continue
     
-    console.log(`Checking blend: ${baseTile} vs ${neighborTile} (${dir})`)
-    
     // Check if tiles can blend
     if (canTilesBlend(baseTile, neighborTile)) {
       const basePriority = getTileBlendPriority(baseTile)
       const neighborPriority = getTileBlendPriority(neighborTile)
       
-      console.log(`  Can blend! Base priority: ${basePriority}, Neighbor priority: ${neighborPriority}`)
-      
-      // Only blend if neighbor has higher priority (neighbor dominates)
+      // Blend if neighbor has higher priority, or same priority with different tiles
       if (neighborPriority > basePriority) {
         // Calculate blend strength based on priority difference
         const priorityDiff = neighborPriority - basePriority
         const maxPriorityDiff = 10 // Reasonable max difference
-        const blendStrength = Math.min(priorityDiff / maxPriorityDiff, 1.0)
-        
-        console.log(`  Adding blend: ${dir} with strength ${blendStrength}`)
+        const blendStrength = 1.5
         
         blends.push({
           direction: dir,
           neighborTile,
           blendStrength
         })
-      } else {
-        console.log(`  Skipping: neighbor priority not higher`)
+      } else if (neighborPriority === basePriority) {
+        // For same priority tiles, use a moderate blend strength
+        // and only blend in one direction to avoid double-blending
+        const shouldBlend = baseTile.localeCompare(neighborTile) < 0 // Consistent direction
+        if (shouldBlend) {
+          const blendStrength = 1.5 // Enhanced blend for same-priority tiles
+          
+          blends.push({
+            direction: dir,
+            neighborTile,
+            blendStrength
+          })
+        }
       }
-    } else {
-      console.log(`  Cannot blend these tile types`)
     }
   }
   
@@ -303,240 +305,240 @@ function createOrganicBlendMask(
   direction: BlendDirection,
   size: number
 ): void {
-  // Create organic, curved edge using path drawing
-  ctx.fillStyle = 'white'
-  ctx.fillRect(0, 0, size, size)
+  // Start with transparent canvas
+  ctx.clearRect(0, 0, size, size)
   
-  ctx.globalCompositeOperation = 'destination-out'
-  
-  // Generate organic curved path based on direction
+  // Generate organic curved path for blend zone
   const path = new Path2D()
   const waveCount = 3 + seededRandom() * 2 // 3-5 waves
-  const amplitude = size * 0.15 // Wave amplitude
+  const amplitude = size * 0.12 // Wave amplitude (reduced for subtler effect)
   
   switch (direction) {
     case BlendDirection.NORTH:
-      createOrganicHorizontalEdge(path, size, 0, amplitude, waveCount, true)
+      createOrganicBlendZone(path, size, direction, amplitude, waveCount)
       break
     case BlendDirection.SOUTH:
-      createOrganicHorizontalEdge(path, size, size, amplitude, waveCount, false)
+      createOrganicBlendZone(path, size, direction, amplitude, waveCount)
       break
     case BlendDirection.EAST:
-      createOrganicVerticalEdge(path, size, size, amplitude, waveCount, false)
+      createOrganicBlendZone(path, size, direction, amplitude, waveCount)
       break
     case BlendDirection.WEST:
-      createOrganicVerticalEdge(path, size, 0, amplitude, waveCount, true)
+      createOrganicBlendZone(path, size, direction, amplitude, waveCount)
       break
     case BlendDirection.NORTHEAST:
-      createOrganicDiagonalEdge(path, size, 'ne', amplitude)
+      createOrganicDiagonalBlendZone(path, size, 'ne', amplitude)
       break
     case BlendDirection.NORTHWEST:
-      createOrganicDiagonalEdge(path, size, 'nw', amplitude)
+      createOrganicDiagonalBlendZone(path, size, 'nw', amplitude)
       break
     case BlendDirection.SOUTHEAST:
-      createOrganicDiagonalEdge(path, size, 'se', amplitude)
+      createOrganicDiagonalBlendZone(path, size, 'se', amplitude)
       break
     case BlendDirection.SOUTHWEST:
-      createOrganicDiagonalEdge(path, size, 'sw', amplitude)
+      createOrganicDiagonalBlendZone(path, size, 'sw', amplitude)
       break
   }
   
-  // Create soft gradient fill
-  const gradient = createSoftGradient(ctx, direction, size)
-  ctx.fillStyle = gradient
+  // Fill the organic blend zone with solid white (full blend)
+  ctx.fillStyle = 'white'
   ctx.fill(path)
 }
 
 /**
- * Create organic horizontal edge (for north/south blending)
+ * Create organic blend zone that extends from the edge where neighbor is located
  */
-function createOrganicHorizontalEdge(
-  path: Path2D, 
-  size: number, 
-  baseY: number, 
-  amplitude: number, 
-  waveCount: number, 
-  isTop: boolean
+function createOrganicBlendZone(
+  path: Path2D,
+  size: number,
+  direction: BlendDirection,
+  amplitude: number,
+  waveCount: number
 ): void {
-  path.moveTo(0, baseY)
+  const blendDepth = size * 0.25 // How deep into tile the blend extends
   
-  // Create wavy edge with organic curves
-  for (let x = 0; x <= size; x += 2) {
-    const progress = x / size
-    const wave1 = Math.sin(progress * Math.PI * waveCount) * amplitude
-    const wave2 = Math.sin(progress * Math.PI * waveCount * 1.7) * amplitude * 0.3
-    const noise = (seededRandom() - 0.5) * amplitude * 0.2
-    
-    let y = baseY
-    if (isTop) {
-      y += wave1 + wave2 + noise
-    } else {
-      y -= wave1 + wave2 + noise
+  switch (direction) {
+    case BlendDirection.NORTH: {
+      // Neighbor is above, blend from top edge downward
+      path.moveTo(0, 0)
+      path.lineTo(size, 0)
+      
+      // Create clean wavy bottom boundary of blend zone
+      for (let x = size; x >= 0; x -= 2) {
+        const progress = x / size
+        const wave1 = Math.sin(progress * Math.PI * waveCount) * amplitude
+        const wave2 = Math.sin(progress * Math.PI * waveCount * 2.3) * amplitude * 0.2
+        const y = blendDepth + wave1 + wave2
+        path.lineTo(x, Math.max(0, Math.min(size, y)))
+      }
+      break
     }
     
-    path.lineTo(x, y)
+    case BlendDirection.SOUTH: {
+      // Neighbor is below, blend from bottom edge upward
+      path.moveTo(0, size)
+      path.lineTo(size, size)
+      
+      // Create clean wavy top boundary of blend zone
+      for (let x = size; x >= 0; x -= 2) {
+        const progress = x / size
+        const wave1 = Math.sin(progress * Math.PI * waveCount) * amplitude
+        const wave2 = Math.sin(progress * Math.PI * waveCount * 2.3) * amplitude * 0.2
+        const y = size - blendDepth - wave1 - wave2
+        path.lineTo(x, Math.max(0, Math.min(size, y)))
+      }
+      break
+    }
+    
+    case BlendDirection.EAST: {
+      // Neighbor is to the right, blend from right edge leftward
+      path.moveTo(size, 0)
+      path.lineTo(size, size)
+      
+      // Create clean wavy left boundary of blend zone
+      for (let y = size; y >= 0; y -= 2) {
+        const progress = y / size
+        const wave1 = Math.sin(progress * Math.PI * waveCount) * amplitude
+        const wave2 = Math.sin(progress * Math.PI * waveCount * 2.3) * amplitude * 0.2
+        const x = size - blendDepth - wave1 - wave2
+        path.lineTo(Math.max(0, Math.min(size, x)), y)
+      }
+      break
+    }
+    
+    case BlendDirection.WEST: {
+      // Neighbor is to the left, blend from left edge rightward
+      path.moveTo(0, 0)
+      path.lineTo(0, size)
+      
+      // Create clean wavy right boundary of blend zone
+      for (let y = size; y >= 0; y -= 2) {
+        const progress = y / size
+        const wave1 = Math.sin(progress * Math.PI * waveCount) * amplitude
+        const wave2 = Math.sin(progress * Math.PI * waveCount * 2.3) * amplitude * 0.2
+        const x = blendDepth + wave1 + wave2
+        path.lineTo(Math.max(0, Math.min(size, x)), y)
+      }
+      break
+    }
   }
   
-  // Close the path
-  if (isTop) {
-    path.lineTo(size, 0)
-    path.lineTo(0, 0)
-  } else {
-    path.lineTo(size, size)
-    path.lineTo(0, size)
-  }
   path.closePath()
 }
 
 /**
- * Create organic vertical edge (for east/west blending)
+ * Create organic diagonal blend zone (for corner blending)
  */
-function createOrganicVerticalEdge(
-  path: Path2D, 
-  size: number, 
-  baseX: number, 
-  amplitude: number, 
-  waveCount: number, 
-  isLeft: boolean
-): void {
-  path.moveTo(baseX, 0)
-  
-  // Create wavy edge with organic curves
-  for (let y = 0; y <= size; y += 2) {
-    const progress = y / size
-    const wave1 = Math.sin(progress * Math.PI * waveCount) * amplitude
-    const wave2 = Math.sin(progress * Math.PI * waveCount * 1.7) * amplitude * 0.3
-    const noise = (seededRandom() - 0.5) * amplitude * 0.2
-    
-    let x = baseX
-    if (isLeft) {
-      x += wave1 + wave2 + noise
-    } else {
-      x -= wave1 + wave2 + noise
-    }
-    
-    path.lineTo(x, y)
-  }
-  
-  // Close the path
-  if (isLeft) {
-    path.lineTo(0, size)
-    path.lineTo(0, 0)
-  } else {
-    path.lineTo(size, size)
-    path.lineTo(size, 0)
-  }
-  path.closePath()
-}
-
-/**
- * Create organic diagonal edge (for corner blending)
- */
-function createOrganicDiagonalEdge(
-  path: Path2D, 
-  size: number, 
+function createOrganicDiagonalBlendZone(
+  path: Path2D,
+  size: number,
   corner: 'ne' | 'nw' | 'se' | 'sw',
   amplitude: number
 ): void {
-  const center = size / 2
-  const radius = size * 0.4
+  const blendDepth = size * 0.25 // Match the edge blend depth
   
-  // Create curved corner transition
-  const steps = 32
-  for (let i = 0; i <= steps; i++) {
-    const angle = (i / steps) * Math.PI * 0.5
-    const noise1 = Math.sin(angle * 6) * amplitude * 0.5
-    const noise2 = (seededRandom() - 0.5) * amplitude * 0.3
-    const r = radius + noise1 + noise2
-    
-    let x, y
-    switch (corner) {
-      case 'ne':
-        x = center + r * Math.cos(angle)
-        y = center - r * Math.sin(angle)
-        break
-      case 'nw':
-        x = center - r * Math.cos(angle)
-        y = center - r * Math.sin(angle)
-        break
-      case 'se':
-        x = center + r * Math.cos(angle)
-        y = center + r * Math.sin(angle)
-        break
-      case 'sw':
-        x = center - r * Math.cos(angle)
-        y = center + r * Math.sin(angle)
-        break
-    }
-    
-    if (i === 0) {
-      path.moveTo(x, y)
-    } else {
-      path.lineTo(x, y)
-    }
-  }
-  
-  // Close with corner area
+  // Create corner blend zones that match the edge blending style
   switch (corner) {
-    case 'ne':
-      path.lineTo(size, 0)
-      path.lineTo(size, size)
+    case 'ne': {
+      // Northeast - blend from top-right corner
+      path.moveTo(size, 0) // Start at top-right corner
+      
+      // Create clean wavy edge along top
+      for (let x = size; x >= size - blendDepth; x -= 2) {
+        const progress = (size - x) / blendDepth
+        const wave = Math.sin(progress * Math.PI * 2.5) * amplitude * 0.8
+        const y = wave
+        path.lineTo(x, Math.max(0, Math.min(blendDepth, y)))
+      }
+      
+      // Create clean wavy edge along right side
+      for (let y = 0; y <= blendDepth; y += 2) {
+        const progress = y / blendDepth
+        const wave = Math.sin(progress * Math.PI * 2.5) * amplitude * 0.8
+        const x = size - wave
+        path.lineTo(Math.max(size - blendDepth, Math.min(size, x)), y)
+      }
+      
+      path.lineTo(size, 0) // Close back to corner
       break
-    case 'nw':
-      path.lineTo(0, 0)
-      path.lineTo(size, 0)
+    }
+    
+    case 'nw': {
+      // Northwest - blend from top-left corner
+      path.moveTo(0, 0) // Start at top-left corner
+      
+      // Create clean wavy edge along top
+      for (let x = 0; x <= blendDepth; x += 2) {
+        const progress = x / blendDepth
+        const wave = Math.sin(progress * Math.PI * 2.5) * amplitude * 0.8
+        const y = wave
+        path.lineTo(x, Math.max(0, Math.min(blendDepth, y)))
+      }
+      
+      // Create clean wavy edge along left side
+      for (let y = 0; y <= blendDepth; y += 2) {
+        const progress = y / blendDepth
+        const wave = Math.sin(progress * Math.PI * 2.5) * amplitude * 0.8
+        const x = wave
+        path.lineTo(Math.max(0, Math.min(blendDepth, x)), y)
+      }
+      
+      path.lineTo(0, 0) // Close back to corner
       break
-    case 'se':
-      path.lineTo(size, size)
-      path.lineTo(0, size)
+    }
+    
+    case 'se': {
+      // Southeast - blend from bottom-right corner
+      path.moveTo(size, size) // Start at bottom-right corner
+      
+      // Create clean wavy edge along bottom
+      for (let x = size; x >= size - blendDepth; x -= 2) {
+        const progress = (size - x) / blendDepth
+        const wave = Math.sin(progress * Math.PI * 2.5) * amplitude * 0.8
+        const y = size - wave
+        path.lineTo(x, Math.max(size - blendDepth, Math.min(size, y)))
+      }
+      
+      // Create clean wavy edge along right side
+      for (let y = size; y >= size - blendDepth; y -= 2) {
+        const progress = (size - y) / blendDepth
+        const wave = Math.sin(progress * Math.PI * 2.5) * amplitude * 0.8
+        const x = size - wave
+        path.lineTo(Math.max(size - blendDepth, Math.min(size, x)), y)
+      }
+      
+      path.lineTo(size, size) // Close back to corner
       break
-    case 'sw':
-      path.lineTo(0, size)
-      path.lineTo(0, 0)
+    }
+    
+    case 'sw': {
+      // Southwest - blend from bottom-left corner
+      path.moveTo(0, size) // Start at bottom-left corner
+      
+      // Create clean wavy edge along bottom
+      for (let x = 0; x <= blendDepth; x += 2) {
+        const progress = x / blendDepth
+        const wave = Math.sin(progress * Math.PI * 2.5) * amplitude * 0.8
+        const y = size - wave
+        path.lineTo(x, Math.max(size - blendDepth, Math.min(size, y)))
+      }
+      
+      // Create clean wavy edge along left side
+      for (let y = size; y >= size - blendDepth; y -= 2) {
+        const progress = (size - y) / blendDepth
+        const wave = Math.sin(progress * Math.PI * 2.5) * amplitude * 0.8
+        const x = wave
+        path.lineTo(Math.max(0, Math.min(blendDepth, x)), y)
+      }
+      
+      path.lineTo(0, size) // Close back to corner
       break
+    }
   }
+  
   path.closePath()
 }
 
-/**
- * Create soft gradient for smooth blending
- */
-function createSoftGradient(
-  ctx: CanvasRenderingContext2D,
-  direction: BlendDirection,
-  size: number
-): CanvasGradient {
-  let gradient: CanvasGradient
-  const center = size / 2
-  
-  // Use radial gradients for smoother, more organic blending
-  switch (direction) {
-    case BlendDirection.NORTH:
-      gradient = ctx.createLinearGradient(0, 0, 0, center)
-      break
-    case BlendDirection.SOUTH:
-      gradient = ctx.createLinearGradient(0, size, 0, center)
-      break
-    case BlendDirection.EAST:
-      gradient = ctx.createLinearGradient(size, 0, center, 0)
-      break
-    case BlendDirection.WEST:
-      gradient = ctx.createLinearGradient(0, 0, center, 0)
-      break
-    default:
-      // Use radial gradient for diagonal directions
-      gradient = ctx.createRadialGradient(center, center, 0, center, center, center)
-      break
-  }
-  
-  // Softer gradient stops for organic blending
-  gradient.addColorStop(0, 'rgba(0, 0, 0, 1)')      // Full cutout
-  gradient.addColorStop(0.4, 'rgba(0, 0, 0, 0.7)')   // Strong cutout
-  gradient.addColorStop(0.7, 'rgba(0, 0, 0, 0.3)')   // Light cutout
-  gradient.addColorStop(1, 'rgba(0, 0, 0, 0)')       // No cutout
-  
-  return gradient
-}
 
 // Cache for blend masks to improve performance
 const blendMaskCache = new Map<string, HTMLCanvasElement>()

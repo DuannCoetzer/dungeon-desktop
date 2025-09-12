@@ -147,7 +147,6 @@ export function renderTileWithBlending(
     return renderTile(ctx, tileId, x, y, size)
   }
   
-  console.log(`Blending tile ${tileId} at (${tileX},${tileY}) with ${blendInfo.blends.length} neighbors`)
   
   // Get the base tile image
   const baseImg = getCachedTileImage(tileId)
@@ -171,20 +170,14 @@ export function renderTileWithBlending(
       continue
     }
     
-    console.log(`  Blending with ${blend.neighborTile} from ${blend.direction} (strength: ${blend.blendStrength})`)
     
-    // Create a simple gradient mask for now (debugging)
-    const gradient = createSimpleBlendGradient(ctx, blend.direction, x, y, size)
+    // Use the existing blend mask from the blending service
+    const blendMask = getCachedBlendMask(blend.direction as any, blend.blendStrength, size)
     
     // Save state for this blend
     ctx.save()
     
-    // Set up clipping with gradient
-    ctx.globalCompositeOperation = 'source-over'
-    ctx.fillStyle = gradient
-    ctx.globalAlpha = blend.blendStrength * 0.5 // Make blend more subtle
-    
-    // Draw the neighbor tile with the gradient mask
+    // Create a temporary canvas for the masked neighbor tile
     const tempCanvas = document.createElement('canvas')
     tempCanvas.width = size
     tempCanvas.height = size
@@ -193,12 +186,13 @@ export function renderTileWithBlending(
     // Draw neighbor tile
     tempCtx.drawImage(neighborImg, 0, 0, size, size)
     
-    // Apply gradient mask
+    // Apply organic mask using destination-in composite operation
     tempCtx.globalCompositeOperation = 'destination-in'
-    tempCtx.fillStyle = gradient
-    tempCtx.fillRect(0, 0, size, size)
+    tempCtx.drawImage(blendMask, 0, 0, size, size)
     
-    // Draw the masked result
+    // Draw the masked result with high visibility for testing
+    ctx.globalAlpha = 0.8 // Make blending very visible
+    ctx.globalCompositeOperation = 'source-over'
     ctx.drawImage(tempCanvas, x, y, size, size)
     
     ctx.restore()
@@ -208,40 +202,6 @@ export function renderTileWithBlending(
   return true
 }
 
-// Simple gradient for debugging blends
-function createSimpleBlendGradient(
-  ctx: CanvasRenderingContext2D,
-  direction: string,
-  x: number,
-  y: number,
-  size: number
-): CanvasGradient {
-  let gradient: CanvasGradient
-  
-  switch (direction) {
-    case 'north':
-      gradient = ctx.createLinearGradient(0, 0, 0, size)
-      break
-    case 'south':
-      gradient = ctx.createLinearGradient(0, size, 0, 0)
-      break
-    case 'east':
-      gradient = ctx.createLinearGradient(size, 0, 0, 0)
-      break
-    case 'west':
-      gradient = ctx.createLinearGradient(0, 0, size, 0)
-      break
-    default:
-      gradient = ctx.createLinearGradient(0, 0, size, size)
-      break
-  }
-  
-  gradient.addColorStop(0, 'rgba(255, 255, 255, 1)')
-  gradient.addColorStop(0.5, 'rgba(255, 255, 255, 0.5)')
-  gradient.addColorStop(1, 'rgba(255, 255, 255, 0)')
-  
-  return gradient
-}
 
 // Fallback colors for tiles when images aren't loaded
 function getTileFallbackColor(tileId: string): string {
