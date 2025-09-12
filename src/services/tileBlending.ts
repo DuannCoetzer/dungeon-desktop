@@ -2,7 +2,8 @@
 // Creates seamless blends by analyzing adjacent tiles and applying edge masks
 
 import type { Palette, Layer, TileMap } from '../store'
-
+import { BlendDirection } from './tileBlendingTypes'
+import { useTileStore } from '../store/tileStore'
 // Direction constants for edge detection
 export const BlendDirection = {
   NORTH: 'north',
@@ -64,48 +65,98 @@ export const TILE_BLEND_PRIORITY: Record<string, number> = {
 
 // Blend edge information for a tile
 export interface TileBlendInfo {
-  baseTile: Palette
+  baseTile: string  // Can be Palette enum or imported tile ID
   blends: {
     direction: BlendDirection
-    neighborTile: Palette
+    neighborTile: string  // Can be Palette enum or imported tile ID
     blendStrength: number // 0.0 to 1.0
   }[]
 }
 
 /**
- * Check if two tiles can blend together
+ * Get tile info from either default palette or tile store
  */
-export function canTilesBlend(tile1: Palette, tile2: Palette): boolean {
-  const group1 = TILE_TO_GROUP[tile1]
-  const group2 = TILE_TO_GROUP[tile2]
+function getTileInfo(tileId: string) {
+  // Check if it's a default palette tile
+  const defaultTiles = ['grass', 'floor-stone-rough', 'floor-stone-smooth', 'floor-wood-planks', 'floor-cobblestone', 'wall', 'wall-brick', 'wall-stone', 'wall-wood', 'fog', 'delete']
+  if (defaultTiles.includes(tileId)) {
+    return { id: tileId, category: getDefaultTileCategory(tileId), isFloor: isFloorTile(tileId) }
+  }
   
-  // Same tiles always blend (no visible blend)
-  if (tile1 === tile2) return true
+  // Check if it's an imported tile
+  const tileStore = useTileStore.getState()
+  const tile = tileStore.getTileById(tileId)
+  if (tile) {
+    return { id: tileId, category: tile.category, isFloor: tile.category === 'floors' }
+  }
   
-  // Special tiles don't blend
-  if (group1 === 'special' || group2 === 'special') return false
+  return null
+}
+
+/**
+ * Get category for default tiles
+ */
+function getDefaultTileCategory(tileId: string): string {
+  if (['grass', 'floor-stone-rough', 'floor-stone-smooth', 'floor-wood-planks', 'floor-cobblestone'].includes(tileId)) {
+    return 'floors'
+  }
+  if (['wall', 'wall-brick', 'wall-stone', 'wall-wood'].includes(tileId)) {
+    return 'walls'
+  }
+  return 'special'
+}
+
+/**
+ * Check if default tile is a floor tile
+ */
+function isFloorTile(tileId: string): boolean {
+  return ['grass', 'floor-stone-rough', 'floor-stone-smooth', 'floor-wood-planks', 'floor-cobblestone'].includes(tileId)
+}
+
+/**
+ * Check if two tiles can blend together
+ * Now allows all floor tiles to blend with organic curves
+ */
+export function canTilesBlend(tile1: string, tile2: string): boolean {
+  // Same tiles don't need blending
+  if (tile1 === tile2) return false
   
-  // Tiles in same compatibility group can blend
-  if (group1 && group2 && group1 === group2) return true
+  // Get tile information
+  const tile1Info = getTileInfo(tile1)
+  const tile2Info = getTileInfo(tile2)
   
-  // Cross-group blending rules
-  // Natural terrain can blend with stone floors
-  if ((group1 === 'natural' && group2 === 'stone') || 
-      (group1 === 'stone' && group2 === 'natural')) return true
+  // If we can't get info for either tile, don't blend
+  if (!tile1Info || !tile2Info) return false
   
-  // Stone floors can blend with each other (already handled above)
-  // Wood floors can blend with stone floors  
-  if ((group1 === 'wood' && group2 === 'stone') ||
-      (group1 === 'stone' && group2 === 'wood')) return true
-      
+  // Only blend floor tiles with other floor tiles
+  if (tile1Info.isFloor && tile2Info.isFloor) {
+    return true
+  }
+  
   return false
 }
 
 /**
  * Get the blending priority of a tile (higher = dominates blend)
  */
-export function getTileBlendPriority(tile: Palette): number {
-  return TILE_BLEND_PRIORITY[tile] ?? 0
+export function getTileBlendPriority(tile: string): number {
+  // Check default priorities first
+  if (TILE_BLEND_PRIORITY[tile] !== undefined) {
+    return TILE_BLEND_PRIORITY[tile]
+  }
+  
+  // For imported tiles, assign priority based on category
+  const tileInfo = getTileInfo(tile)
+  if (tileInfo) {
+    switch (tileInfo.category) {
+      case 'floors': return 2
+      case 'walls': return 10
+      case 'special': return 1
+      default: return 1
+    }
+  }
+  
+  return 0
 }
 
 /**
@@ -119,7 +170,7 @@ export function analyzeTileBlending(
 ): TileBlendInfo | null {
   const tileMap = tiles[layer]
   const baseTileKey = `${x},${y}`
-  const baseTile = tileMap[baseTileKey] as Palette
+  const baseTile = tileMap[baseTileKey] as string
   
   if (!baseTile || baseTile === 'delete') {
     return null
@@ -141,7 +192,7 @@ export function analyzeTileBlending(
   
   for (const { dir, dx, dy } of directions) {
     const neighborKey = `${x + dx},${y + dy}`
-    const neighborTile = tileMap[neighborKey] as Palette
+    const neighborTile = tileMap[neighborKey] as string
     
     if (!neighborTile || neighborTile === 'delete') continue
     

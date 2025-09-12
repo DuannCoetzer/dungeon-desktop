@@ -75,8 +75,8 @@ export function loadTileImage(palette: Palette): Promise<HTMLImageElement> {
 }
 
 // Get cached image (returns null if not loaded)
-export function getCachedTileImage(palette: Palette): HTMLImageElement | null {
-  return imageCache.get(palette) || null
+export function getCachedTileImage(tileId: string): HTMLImageElement | null {
+  return imageCache.get(tileId) || null
 }
 
 // Preload all tile images (default and imported)
@@ -109,19 +109,19 @@ export function preloadAllTileImages(): Promise<void> {
 // Render a tile on canvas context
 export function renderTile(
   ctx: CanvasRenderingContext2D, 
-  palette: Palette, 
+  tileId: string, 
   x: number, 
   y: number, 
   size: number
 ): boolean {
-  const img = getCachedTileImage(palette)
+  const img = getCachedTileImage(tileId)
   
   if (img) {
     ctx.drawImage(img, x, y, size, size)
     return true
   } else {
     // Fallback to color if image not loaded
-    ctx.fillStyle = getTileFallbackColor(palette)
+    ctx.fillStyle = getTileFallbackColor(tileId)
     ctx.fillRect(x, y, size, size)
     return false
   }
@@ -132,7 +132,7 @@ export function renderTileWithBlending(
   ctx: CanvasRenderingContext2D,
   tileX: number,
   tileY: number,
-  palette: Palette,
+  tileId: string,
   x: number,
   y: number,
   size: number,
@@ -144,16 +144,16 @@ export function renderTileWithBlending(
   
   // If no blending needed, use regular rendering
   if (!blendInfo || blendInfo.blends.length === 0) {
-    return renderTile(ctx, palette, x, y, size)
+    return renderTile(ctx, tileId, x, y, size)
   }
   
-  console.log(`Blending tile ${palette} at (${tileX},${tileY}) with ${blendInfo.blends.length} neighbors`)
+  console.log(`Blending tile ${tileId} at (${tileX},${tileY}) with ${blendInfo.blends.length} neighbors`)
   
   // Get the base tile image
-  const baseImg = getCachedTileImage(palette)
+  const baseImg = getCachedTileImage(tileId)
   if (!baseImg) {
-    console.warn('Base tile image not found for:', palette)
-    return renderTile(ctx, palette, x, y, size) // Fallback
+    console.warn('Base tile image not found for:', tileId)
+    return renderTile(ctx, tileId, x, y, size) // Fallback
   }
   
   // Save context state
@@ -244,8 +244,9 @@ function createSimpleBlendGradient(
 }
 
 // Fallback colors for tiles when images aren't loaded
-function getTileFallbackColor(palette: Palette): string {
-  switch (palette) {
+function getTileFallbackColor(tileId: string): string {
+  // Handle default palette colors
+  switch (tileId) {
     case 'grass':
       return '#4a7c2a'
     case 'wall':
@@ -264,6 +265,18 @@ function getTileFallbackColor(palette: Palette): string {
     case 'fog':
       return 'rgba(0, 10, 20, 0.8)' // Semi-transparent dark blue-black
     default:
+      // For imported tiles, use a generic color based on category if available
+      const tileStore = useTileStore.getState()
+      const tile = tileStore.getTileById(tileId)
+      if (tile) {
+        switch (tile.category) {
+          case 'floors': return '#8b4513' // Brown for floors
+          case 'walls': return '#5a5a5a' // Gray for walls
+          case 'roofs': return '#654321' // Dark brown for roofs
+          case 'pathing': return '#696969' // Dark gray for paths
+          default: return '#4a7c2a' // Green default
+        }
+      }
       return '#4a7c2a' // Default to grass color
   }
 }

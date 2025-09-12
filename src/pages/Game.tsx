@@ -404,9 +404,9 @@ export default function Game() {
         
         // Use blended tile renderer for floor tiles if blending is enabled, regular renderer otherwise
         if (tileData.layer === 'floor' && isTileBlendingEnabled) {
-          renderTileWithBlending(ctx, tx, ty, tileData.tileType, sx, sy, size, tiles, tileData.layer)
+          renderTileWithBlending(ctx, tx, ty, tileData.tileType as string, sx, sy, size, tiles, tileData.layer)
         } else {
-          renderTile(ctx, tileData.tileType, sx, sy, size)
+          renderTile(ctx, tileData.tileType as string, sx, sy, size)
         }
         
         ctx.globalAlpha = prevAlpha
