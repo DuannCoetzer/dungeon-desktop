@@ -24,7 +24,7 @@ export function TileBrowser({ onTileSelect, className = '' }: TileBrowserProps) 
     
     // Convert tile ID to palette format for backward compatibility
     const paletteId = convertTileToLegacyId(tile)
-    setSelectedPalette(paletteId)
+    setSelectedPalette(paletteId as any) // Cast to satisfy TypeScript for legacy compatibility
     
     onTileSelect?.(tile)
   }

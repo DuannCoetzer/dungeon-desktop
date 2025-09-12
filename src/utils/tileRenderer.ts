@@ -86,8 +86,7 @@ export function preloadAllTileImages(): Promise<void> {
   
   // Preload imported tiles from tile store
   const tileStore = useTileStore.getState()
-  const importedPromises = tileStore.tiles
-    .filter(tile => !tile.isDefault)
+  const importedPromises = tileStore.importedTiles
     .map(tile => 
       loadTileImage(tile.id as Palette).catch(err => {
         console.warn(`Failed to preload imported tile image for ${tile.name}:`, err)

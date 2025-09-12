@@ -153,6 +153,70 @@ async fn clear_imported_assets(app_handle: tauri::AppHandle) -> Result<(), Strin
     }
 }
 
+// Command to read imported tiles from app data directory
+#[tauri::command]
+async fn read_imported_tiles(app_handle: tauri::AppHandle) -> Result<String, String> {
+    use tauri::Manager;
+    
+    let app_data_dir = app_handle.path().app_data_dir()
+        .map_err(|e| format!("Failed to get app data directory: {}", e))?;
+    
+    let tiles_file = app_data_dir.join("tile-store.json");
+    
+    // Create directory if it doesn't exist
+    if let Some(parent) = tiles_file.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|e| format!("Failed to create app data directory: {}", e))?;
+    }
+    
+    match std::fs::read_to_string(&tiles_file) {
+        Ok(contents) => Ok(contents),
+        Err(_) => Ok("{\"tiles\":[],\"version\":2}".to_string()), // Return empty store structure if file doesn't exist
+    }
+}
+
+// Command to write imported tiles to app data directory
+#[tauri::command]
+async fn write_imported_tiles(app_handle: tauri::AppHandle, tiles_data: String) -> Result<(), String> {
+    use tauri::Manager;
+    
+    let app_data_dir = app_handle.path().app_data_dir()
+        .map_err(|e| format!("Failed to get app data directory: {}", e))?;
+    
+    let tiles_file = app_data_dir.join("tile-store.json");
+    
+    // Create directory if it doesn't exist
+    if let Some(parent) = tiles_file.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|e| format!("Failed to create app data directory: {}", e))?;
+    }
+    
+    match std::fs::write(&tiles_file, tiles_data) {
+        Ok(_) => Ok(()),
+        Err(e) => Err(format!("Failed to write imported tiles: {}", e)),
+    }
+}
+
+// Command to clear imported tiles file
+#[tauri::command]
+async fn clear_imported_tiles(app_handle: tauri::AppHandle) -> Result<(), String> {
+    use tauri::Manager;
+    
+    let app_data_dir = app_handle.path().app_data_dir()
+        .map_err(|e| format!("Failed to get app data directory: {}", e))?;
+    
+    let tiles_file = app_data_dir.join("tile-store.json");
+    
+    if tiles_file.exists() {
+        match std::fs::remove_file(&tiles_file) {
+            Ok(_) => Ok(()),
+            Err(e) => Err(format!("Failed to remove imported tiles file: {}", e)),
+        }
+    } else {
+        Ok(()) // File doesn't exist, nothing to clear
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -167,7 +231,10 @@ pub fn run() {
             save_map,
             read_imported_assets,
             write_imported_assets,
-            clear_imported_assets
+            clear_imported_assets,
+            read_imported_tiles,
+            write_imported_tiles,
+            clear_imported_tiles
         ])
         .setup(|app| {
             if cfg!(debug_assertions) {

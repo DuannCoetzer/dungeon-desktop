@@ -1,5 +1,4 @@
 import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
 import { 
   TileGrass, 
   TileWall,
@@ -12,6 +11,15 @@ import {
   TileWallWood,
   IconErase
 } from '../assets'
+import { 
+  loadImportedTiles, 
+  addImportedTile, 
+  removeImportedTile, 
+  updateImportedTile,
+  clearImportedTiles,
+  isImportedTile,
+  migrateTilesFromLocalStorage
+} from '../services/tilePersistence'
 
 export interface Tile {
   id: string
@@ -27,7 +35,13 @@ export type TileCategory = 'floors' | 'walls' | 'roofs' | 'pathing' | 'special'
 
 interface TileState {
   // Tile definitions
-  tiles: Tile[]
+  defaultTiles: Tile[]        // Built-in tiles
+  importedTiles: Tile[]       // User-imported tiles (persistent)
+  allTiles: Tile[]           // Combined list of all tiles
+  
+  // Loading state
+  isLoading: boolean
+  error: string | null
   
   // Category management
   categories: Array<{
@@ -38,15 +52,19 @@ interface TileState {
   }>
   
   // Actions
+  loadDefaultTiles: () => void
+  loadImportedTiles: () => Promise<void>
   addTile: (tile: Omit<Tile, 'id'>) => Promise<boolean>
   updateTile: (id: string, updates: Partial<Tile>) => Promise<boolean>
   removeTile: (id: string) => Promise<boolean>
+  clearAllImportedTiles: () => Promise<boolean>
   getTileById: (id: string) => Tile | undefined
   getTilesByCategory: (category: TileCategory) => Tile[]
   importTiles: (files: File[], category: TileCategory) => Promise<{ success: number, failed: number, errors: string[] }>
+  clearError: () => void
   
-  // Initialize default tiles
-  loadDefaultTiles: () => void
+  // Migration
+  migrateFromLocalStorage: () => Promise<boolean>
 }
 
 // Create a fog tile image as a data URL
@@ -103,140 +121,252 @@ const DEFAULT_TILES: Omit<Tile, 'id'>[] = [
   { name: 'Fog of War', category: 'special', src: createFogTileDataURL(), isDefault: true } // Dark fog tile for painting fog of war
 ]
 
-export const useTileStore = create<TileState>()(
-  persist(
-    (set, get) => ({
-      tiles: [],
-      categories: DEFAULT_CATEGORIES,
+export const useTileStore = create<TileState>((set, get) => ({
+  // Initial state
+  defaultTiles: [],
+  importedTiles: [],
+  allTiles: [],
+  isLoading: false,
+  error: null,
+  categories: DEFAULT_CATEGORIES,
+  
+  // Load default tiles (synchronous, from constants)
+  loadDefaultTiles: () => {
+    const defaultTiles: Tile[] = DEFAULT_TILES.map((tile, index) => ({
+      ...tile,
+      id: `default_${index}`,
+      thumb: tile.src
+    }))
+    
+    set(state => ({
+      defaultTiles,
+      allTiles: [...defaultTiles, ...state.importedTiles]
+    }))
+    
+    console.log(`Loaded ${defaultTiles.length} default tiles`)
+  },
+  
+  // Load imported tiles from file storage
+  loadImportedTiles: async () => {
+    try {
+      set({ isLoading: true, error: null })
       
-      addTile: async (tileData) => {
-        const newTile: Tile = {
-          ...tileData,
-          id: `tile_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-          createdAt: new Date().toISOString()
-        }
-        
-        set(state => ({
-          tiles: [...state.tiles, newTile]
-        }))
-        
+      const importedTiles = await loadImportedTiles()
+      
+      set(state => ({
+        importedTiles,
+        allTiles: [...state.defaultTiles, ...importedTiles],
+        isLoading: false
+      }))
+      
+      console.log(`Loaded ${importedTiles.length} imported tiles`)
+    } catch (error) {
+      console.error('Error loading imported tiles:', error)
+      set({ 
+        error: error instanceof Error ? error.message : 'Unknown error',
+        isLoading: false 
+      })
+    }
+  },
+  
+  // Add a new tile (will be persisted)
+  addTile: async (tileData) => {
+    try {
+      const newTile: Tile = {
+        ...tileData,
+        id: `tile_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        createdAt: new Date().toISOString(),
+        isDefault: false // Ensure added tiles are marked as imported
+      }
+      
+      const success = await addImportedTile(newTile)
+      if (success) {
+        set(state => {
+          const updatedImported = [...state.importedTiles, newTile]
+          return {
+            importedTiles: updatedImported,
+            allTiles: [...state.defaultTiles, ...updatedImported],
+            error: null // Clear any previous errors on success
+          }
+        })
+        console.log('Tile added successfully:', newTile.name)
         return true
-      },
+      }
+      return false
+    } catch (error) {
+      console.error('Error adding tile:', error)
+      let errorMessage = 'Failed to save tile to file'
+      if (error instanceof Error) {
+        errorMessage = error.message
+      }
+      set({ error: errorMessage })
+      return false
+    }
+  },
+  
+  // Update an existing tile
+  updateTile: async (id, updates) => {
+    try {
+      if (!isImportedTile(id)) {
+        console.error('Cannot update default tile:', id)
+        return false
+      }
       
-      updateTile: async (id, updates) => {
-        const state = get()
-        const existingTile = state.tiles.find(t => t.id === id)
-        
-        if (!existingTile) return false
-        
-        // Don't allow updating default tiles' core properties
-        if (existingTile.isDefault && ('category' in updates || 'src' in updates)) {
-          return false
-        }
-        
-        set(state => ({
-          tiles: state.tiles.map(tile => 
+      const success = await updateImportedTile(id, updates)
+      if (success) {
+        set(state => {
+          const updatedImported = state.importedTiles.map(tile =>
             tile.id === id ? { ...tile, ...updates } : tile
           )
-        }))
-        
-        return true
-      },
-      
-      removeTile: async (id) => {
-        const state = get()
-        const tile = state.tiles.find(t => t.id === id)
-        
-        // Don't allow deleting default tiles
-        if (tile?.isDefault) return false
-        
-        set(state => ({
-          tiles: state.tiles.filter(tile => tile.id !== id)
-        }))
-        
-        return true
-      },
-      
-      getTileById: (id) => {
-        return get().tiles.find(t => t.id === id)
-      },
-      
-      getTilesByCategory: (category) => {
-        return get().tiles.filter(t => t.category === category)
-      },
-      
-      importTiles: async (files, category) => {
-        const results = { success: 0, failed: 0, errors: [] as string[] }
-        
-        for (const file of files) {
-          try {
-            // Validate file type
-            if (!file.type.startsWith('image/')) {
-              results.failed++
-              results.errors.push(`${file.name}: Not an image file`)
-              continue
-            }
-            
-            // Convert to data URL
-            const dataUrl = await new Promise<string>((resolve, reject) => {
-              const reader = new FileReader()
-              reader.onload = (e) => resolve(e.target?.result as string)
-              reader.onerror = reject
-              reader.readAsDataURL(file)
-            })
-            
-            // Create tile
-            const success = await get().addTile({
-              name: file.name.replace(/\.[^/.]+$/, ''), // Remove extension
-              category,
-              src: dataUrl,
-              thumb: dataUrl,
-              isDefault: false
-            })
-            
-            if (success) {
-              results.success++
-            } else {
-              results.failed++
-              results.errors.push(`${file.name}: Failed to save`)
-            }
-          } catch (error) {
-            results.failed++
-            results.errors.push(`${file.name}: ${error instanceof Error ? error.message : 'Unknown error'}`)
+          return {
+            importedTiles: updatedImported,
+            allTiles: [...state.defaultTiles, ...updatedImported]
           }
+        })
+        console.log('Tile updated successfully:', id)
+      }
+      return success
+    } catch (error) {
+      console.error('Error updating tile:', error)
+      return false
+    }
+  },
+  
+  // Remove a tile by ID
+  removeTile: async (id) => {
+    try {
+      if (!isImportedTile(id)) {
+        console.error('Cannot remove default tile:', id)
+        return false
+      }
+      
+      const success = await removeImportedTile(id)
+      if (success) {
+        set(state => {
+          const updatedImported = state.importedTiles.filter(tile => tile.id !== id)
+          return {
+            importedTiles: updatedImported,
+            allTiles: [...state.defaultTiles, ...updatedImported]
+          }
+        })
+        console.log('Tile removed successfully:', id)
+      }
+      return success
+    } catch (error) {
+      console.error('Error removing tile:', error)
+      return false
+    }
+  },
+  
+  // Clear all imported tiles
+  clearAllImportedTiles: async () => {
+    try {
+      const success = await clearImportedTiles()
+      if (success) {
+        set(state => ({
+          importedTiles: [],
+          allTiles: [...state.defaultTiles]
+        }))
+        console.log('All imported tiles cleared')
+      }
+      return success
+    } catch (error) {
+      console.error('Error clearing imported tiles:', error)
+      return false
+    }
+  },
+  
+  // Get tile by ID
+  getTileById: (id) => {
+    return get().allTiles.find(t => t.id === id)
+  },
+  
+  // Get tiles by category
+  getTilesByCategory: (category) => {
+    return get().allTiles.filter(t => t.category === category)
+  },
+  
+  // Import tiles from files
+  importTiles: async (files, category) => {
+    const results = { success: 0, failed: 0, errors: [] as string[] }
+    
+    for (const file of files) {
+      try {
+        // Validate file type
+        if (!file.type.startsWith('image/')) {
+          results.failed++
+          results.errors.push(`${file.name}: Not an image file`)
+          continue
         }
         
-        return results
-      },
-      
-      loadDefaultTiles: () => {
-        const state = get()
+        // Convert to data URL
+        const dataUrl = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader()
+          reader.onload = (e) => resolve(e.target?.result as string)
+          reader.onerror = reject
+          reader.readAsDataURL(file)
+        })
         
-        // For version 2, we need to reload to include the fog tile
-        // Remove all existing default tiles and reload them
-        const defaultTiles: Tile[] = DEFAULT_TILES.map((tile, index) => ({
-          ...tile,
-          id: `default_${index}`,
-          thumb: tile.src
-        }))
+        // Create tile
+        const success = await get().addTile({
+          name: file.name.replace(/\.[^/.]+$/, ''), // Remove extension
+          category,
+          src: dataUrl,
+          thumb: dataUrl,
+          isDefault: false
+        })
         
-        set(state => ({
-          tiles: [...defaultTiles, ...state.tiles.filter(t => !t.isDefault)]
-        }))
+        if (success) {
+          results.success++
+        } else {
+          results.failed++
+          results.errors.push(`${file.name}: Failed to save`)
+        }
+      } catch (error) {
+        results.failed++
+        results.errors.push(`${file.name}: ${error instanceof Error ? error.message : 'Unknown error'}`)
       }
-    }),
-    {
-      name: 'tile-store',
-      version: 2 // Bumped to force reload with fog tile
     }
-  )
-)
+    
+    return results
+  },
+  
+  // Clear error state
+  clearError: () => {
+    set({ error: null })
+  },
+  
+  // Migrate from localStorage
+  migrateFromLocalStorage: async () => {
+    try {
+      set({ isLoading: true, error: null })
+      const success = await migrateTilesFromLocalStorage()
+      if (success) {
+        // Reload imported tiles after migration
+        await get().loadImportedTiles()
+      }
+      set({ isLoading: false })
+      return success
+    } catch (error) {
+      console.error('Error migrating from localStorage:', error)
+      set({ 
+        error: error instanceof Error ? error.message : 'Migration failed',
+        isLoading: false 
+      })
+      return false
+    }
+  }
+}))
 
 // Convenience hooks for accessing specific data
-export const useAllTiles = () => useTileStore(state => state.tiles)
+export const useAllTiles = () => useTileStore(state => state.allTiles)
+export const useDefaultTiles = () => useTileStore(state => state.defaultTiles)
+export const useImportedTiles = () => useTileStore(state => state.importedTiles)
 export const useTileCategories = () => useTileStore(state => state.categories)
-export const useFloorTiles = () => useTileStore(state => state.tiles.filter(t => t.category === 'floors'))
-export const useWallTiles = () => useTileStore(state => state.tiles.filter(t => t.category === 'walls'))
-export const useRoofTiles = () => useTileStore(state => state.tiles.filter(t => t.category === 'roofs'))
-export const usePathingTiles = () => useTileStore(state => state.tiles.filter(t => t.category === 'pathing'))
-export const useSpecialTiles = () => useTileStore(state => state.tiles.filter(t => t.category === 'special'))
+export const useTileLoading = () => useTileStore(state => state.isLoading)
+export const useTileError = () => useTileStore(state => state.error)
+export const useFloorTiles = () => useTileStore(state => state.allTiles.filter(t => t.category === 'floors'))
+export const useWallTiles = () => useTileStore(state => state.allTiles.filter(t => t.category === 'walls'))
+export const useRoofTiles = () => useTileStore(state => state.allTiles.filter(t => t.category === 'roofs'))
+export const usePathingTiles = () => useTileStore(state => state.allTiles.filter(t => t.category === 'pathing'))
+export const useSpecialTiles = () => useTileStore(state => state.allTiles.filter(t => t.category === 'special'))
