@@ -15,7 +15,7 @@ import { ImageMapImporter } from '../components/ImageMapImporter'
 import { TileBrowser } from '../components/TileBrowser'
 import { useAllAssets } from '../store/assetStore'
 import { useTileStore } from '../store/tileStore'
-import { preloadAllTileImages, renderTile } from '../utils/tileRenderer'
+import { preloadAllTileImages, renderTile, renderTileWithBlending } from '../utils/tileRenderer'
 import { applyParchmentBackground } from '../utils/canvasUtils'
 import type { Palette } from '../store'
 import { About } from '../components/About'
@@ -39,8 +39,10 @@ export default function Game() {
   const setTool = useUIStore(state => state.setSelectedTool)
   const isGridVisible = useUIStore(state => state.isGridVisible)
   const isSnapToGrid = useUIStore(state => state.isSnapToGrid)
+  const isTileBlendingEnabled = useUIStore(state => state.isTileBlendingEnabled)
   const toggleGrid = useUIStore(state => state.toggleGrid)
   const toggleSnapToGrid = useUIStore(state => state.toggleSnapToGrid)
+  const toggleTileBlending = useUIStore(state => state.toggleTileBlending)
   
   // Map state from map store
   const selected = useSelectedPalette()
@@ -400,8 +402,12 @@ export default function Game() {
         const prevAlpha = ctx.globalAlpha
         ctx.globalAlpha = tileData.opacity
         
-        // Use the new tile renderer with image support
-        renderTile(ctx, tileData.tileType, sx, sy, size)
+        // Use blended tile renderer for floor tiles if blending is enabled, regular renderer otherwise
+        if (tileData.layer === 'floor' && isTileBlendingEnabled) {
+          renderTileWithBlending(ctx, tx, ty, tileData.tileType, sx, sy, size, tiles, tileData.layer)
+        } else {
+          renderTile(ctx, tileData.tileType, sx, sy, size)
+        }
         
         ctx.globalAlpha = prevAlpha
       }
@@ -886,6 +892,16 @@ export default function Game() {
                 style={{ margin: 0 }}
               />
               <label htmlFor="showGrid" style={{ color: '#e6e6e6' }}>Show Grid</label>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px' }}>
+              <input
+                type="checkbox"
+                id="tileBlending"
+                checked={isTileBlendingEnabled}
+                onChange={toggleTileBlending}
+                style={{ margin: 0 }}
+              />
+              <label htmlFor="tileBlending" style={{ color: '#e6e6e6' }}>Floor Tile Blending</label>
             </div>
           </div>
         </div>

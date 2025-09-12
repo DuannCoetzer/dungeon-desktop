@@ -104,6 +104,7 @@ export interface UIState {
   // UI flags
   isGridVisible: boolean
   isSnapToGrid: boolean
+  isTileBlendingEnabled: boolean
   gridSize: number
   
   // Actions
@@ -140,6 +141,7 @@ export interface UIState {
   
   toggleGrid: () => void
   toggleSnapToGrid: () => void
+  toggleTileBlending: () => void
   setGridSize: (size: number) => void
   
   // Auto-wall actions
@@ -227,6 +229,7 @@ export const useUIStore = create<UIState>((set, get) => ({
   toolTempState: { ...defaultToolTempState },
   isGridVisible: true,
   isSnapToGrid: true,
+  isTileBlendingEnabled: true, // Enable blending by default
   gridSize: 32,
   
   // Tool actions
@@ -390,6 +393,9 @@ export const useUIStore = create<UIState>((set, get) => ({
   })),
   toggleSnapToGrid: () => set((state) => ({
     isSnapToGrid: !state.isSnapToGrid
+  })),
+  toggleTileBlending: () => set((state) => ({
+    isTileBlendingEnabled: !state.isTileBlendingEnabled
   })),
   setGridSize: (size) => set({
     gridSize: Math.max(1, size)
