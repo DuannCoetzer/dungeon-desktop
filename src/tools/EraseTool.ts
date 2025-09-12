@@ -75,6 +75,9 @@ export class EraseTool implements Tool {
     
     const state = useMapStore.getState()
     
+    // Debug: Log current layer
+    console.log('EraseTool current layer:', state.currentLayer)
+    
     const x0 = Math.min(this.startTile.x, this.currentTile.x)
     const x1 = Math.max(this.startTile.x, this.currentTile.x)
     const y0 = Math.min(this.startTile.y, this.currentTile.y)
@@ -83,6 +86,7 @@ export class EraseTool implements Tool {
     // Erase all tiles in the rectangle
     for (let y = y0; y <= y1; y++) {
       for (let x = x0; x <= x1; x++) {
+        console.log(`Erasing tile at (${x}, ${y}) on layer ${state.currentLayer}`)
         state.eraseTile(x, y)
       }
     }

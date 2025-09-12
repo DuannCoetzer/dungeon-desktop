@@ -138,9 +138,18 @@ export class MapProtocol {
 
   eraseTile(layer: Layer, x: number, y: number): void {
     const key = this.getTileKey(x, y)
+    console.log(`Protocol eraseTile: layer=${layer}, x=${x}, y=${y}, key=${key}`)
+    console.log('Tiles before erase:', Object.keys(this.mapData.tiles[layer]))
+    
     const layerTiles = { ...this.mapData.tiles[layer] }
+    const tileExists = key in layerTiles
+    console.log(`Tile exists: ${tileExists}, value:`, layerTiles[key])
+    
     delete layerTiles[key]
     this.mapData.tiles[layer] = layerTiles
+    
+    console.log('Tiles after erase:', Object.keys(this.mapData.tiles[layer]))
+    
     this.mapData.updatedAt = new Date().toISOString()
     this.notify()
   }
