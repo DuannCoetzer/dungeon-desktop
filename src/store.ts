@@ -24,6 +24,13 @@ export type Palette =
   | 'wall-wood'
   // Special tiles
   | 'fog'
+  // Legacy and flexible tile types
+  | 'floor'
+  | 'water'
+  | 'lava'
+  | 'dirt'
+  // Allow any string for imported tiles
+  | string
 export type Layer = 'floor' | 'walls' | 'objects' | 'assets' | 'fog'
 export type TileMap = Record<string, TileType>
 

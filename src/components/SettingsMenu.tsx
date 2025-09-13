@@ -11,9 +11,11 @@ const SettingsMenu: React.FC = () => {
     enableWarpDistortion,
     enableParchmentCreases,
     showAdvancedSettings,
+    enableDebugLogging,
     setWarpDistortion,
     setParchmentCreases,
     setShowAdvancedSettings,
+    setDebugLogging,
     resetToDefaults,
   } = useSettingsStore()
 
@@ -146,6 +148,28 @@ const SettingsMenu: React.FC = () => {
                 </label>
               </div>
             </div>
+            
+            {/* Super Secret Debug Settings */}
+            {showAdvancedSettings && (
+              <div className="settings-section">
+                <h4>🔧 Developer Options</h4>
+                
+                <div className="setting-item">
+                  <label className="setting-label">
+                    <input
+                      type="checkbox"
+                      checked={enableDebugLogging}
+                      onChange={(e) => setDebugLogging(e.target.checked)}
+                      className="setting-checkbox"
+                    />
+                    <span className="setting-text">
+                      📊 Debug Logging
+                      <small>Enable verbose console logging for debugging</small>
+                    </span>
+                  </label>
+                </div>
+              </div>
+            )}
 
             {/* Reset Section */}
             <div className="settings-section">

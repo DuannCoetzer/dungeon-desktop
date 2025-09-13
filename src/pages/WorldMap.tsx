@@ -1,5 +1,5 @@
 import Game from './Game'
 
 export default function WorldMap() {
-  return <Game mapMode="world" />
+  return <Game />
 }

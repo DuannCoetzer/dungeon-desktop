@@ -3,7 +3,7 @@ import { useMapStore, useAssetInstances, useLayerSettings } from '../mapStore'
 import { useUIStore } from '../uiStore'
 import { getSavedMaps, exportMapData } from '../services/tauri'
 import { useAssetStore } from '../store/assetStore'
-import { getCachedTileImage, renderTile, loadTileImage, TILE_IMAGE_MAP } from '../utils/tileRenderer'
+import { preloadAllTileImages, renderTile, getCachedTileImage, renderSmartTile, TILE_IMAGE_MAP, loadTileImage } from '../utils/tileRenderer'
 import { applyParchmentBackground } from '../utils/canvasUtils'
 import type { Palette } from '../store'
 
@@ -256,8 +256,19 @@ export function FileOperationsPanel() {
           const size = TILE_SIZE * EXPORT_SCALE
           const palette = tiles[layer][k] as Palette
           
-          // Use the shared tile renderer
-          renderTile(exportCtx, palette, sx, sy, size)
+          // Use the smart tile renderer with blending support for consistent export
+          renderSmartTile(
+            exportCtx,
+            palette as string,
+            sx,
+            sy,
+            size,
+            tx, // tile coordinates for blending
+            ty,
+            tiles, // tile data for neighbor analysis
+            layer, // current layer
+            true // force blending for export consistency
+          )
         }
         
         // Restore original alpha

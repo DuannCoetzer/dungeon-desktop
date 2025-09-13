@@ -44,7 +44,9 @@ export const ProtocolExample: React.FC = () => {
       y: 10,
       width: 32,
       height: 32,
-      rotation: 0
+      rotation: 0,
+      gridWidth: 1,
+      gridHeight: 1
     }
     addAssetInstance(assetInstance)
   }

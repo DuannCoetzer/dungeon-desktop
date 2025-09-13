@@ -9,10 +9,14 @@ interface SettingsState {
   // UI preferences
   showAdvancedSettings: boolean
   
+  // Debug settings
+  enableDebugLogging: boolean
+  
   // Actions
   setWarpDistortion: (enabled: boolean) => void
   setParchmentCreases: (enabled: boolean) => void
   setShowAdvancedSettings: (show: boolean) => void
+  setDebugLogging: (enabled: boolean) => void
   
   // Reset to defaults
   resetToDefaults: () => void
@@ -22,6 +26,7 @@ const DEFAULT_SETTINGS = {
   enableWarpDistortion: false,
   enableParchmentCreases: false,
   showAdvancedSettings: false,
+  enableDebugLogging: false,
 }
 
 export const useSettingsStore = create<SettingsState>()(
@@ -32,6 +37,7 @@ export const useSettingsStore = create<SettingsState>()(
       setWarpDistortion: (enabled) => set({ enableWarpDistortion: enabled }),
       setParchmentCreases: (enabled) => set({ enableParchmentCreases: enabled }),
       setShowAdvancedSettings: (show) => set({ showAdvancedSettings: show }),
+      setDebugLogging: (enabled) => set({ enableDebugLogging: enabled }),
       
       resetToDefaults: () => set(DEFAULT_SETTINGS),
     }),
@@ -46,3 +52,7 @@ export const useSettingsStore = create<SettingsState>()(
 export const useWarpDistortion = () => useSettingsStore(state => state.enableWarpDistortion)
 export const useParchmentCreases = () => useSettingsStore(state => state.enableParchmentCreases)
 export const useAdvancedSettings = () => useSettingsStore(state => state.showAdvancedSettings)
+export const useDebugLogging = () => useSettingsStore(state => state.enableDebugLogging)
+
+// Global debug logging utility
+export const isDebugLoggingEnabled = () => useSettingsStore.getState().enableDebugLogging

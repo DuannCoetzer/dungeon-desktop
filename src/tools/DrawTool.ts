@@ -95,12 +95,11 @@ export class DrawTool implements Tool {
       assetId: assetId,
       x: context.tileX * 32,
       y: context.tileY * 32,
+      width: asset.width,
+      height: asset.height,
       rotation: 0,
-      flipX: false,
-      flipY: false,
-      opacity: 1,
-      visible: true,
-      zIndex: 0
+      gridWidth: asset.gridWidth || 1,
+      gridHeight: asset.gridHeight || 1
     }
     
     // Add the asset instance to the map

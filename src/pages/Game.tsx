@@ -15,8 +15,9 @@ import { ImageMapImporter } from '../components/ImageMapImporter'
 import { TileBrowser } from '../components/TileBrowser'
 import { useAllAssets } from '../store/assetStore'
 import { useTileStore } from '../store/tileStore'
-import { preloadAllTileImages, renderTile, renderTileWithBlending } from '../utils/tileRenderer'
+import { preloadAllTileImages, renderTile, renderTileWithBlending, renderSmartTile } from '../utils/tileRenderer'
 import { applyParchmentBackground } from '../utils/canvasUtils'
+import { isDebugLoggingEnabled } from '../store/settingsStore'
 import type { Palette } from '../store'
 import { About } from '../components/About'
 
@@ -25,6 +26,7 @@ const TILE = 32
 export default function Game() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const stageRef = useRef<HTMLElement | null>(null)
+  const dropRef = useRef<HTMLDivElement | null>(null)
   const [, setDragTransform] = useState({ scale: 1, offsetX: 0, offsetY: 0 })
   
   // Image map importer state
@@ -75,18 +77,22 @@ export default function Game() {
       return true
     },
     drop: (item: { asset: Asset }, monitor) => {
-      console.log('🎯 Asset drop received:', item.asset.name)
-      console.log('🎯 Drop monitor info:', {
-        canDrop: monitor.canDrop(),
-        isOver: monitor.isOver(),
-        didDrop: monitor.didDrop()
-      })
+      if (isDebugLoggingEnabled()) {
+        console.log('🎯 Asset drop received:', item.asset.name)
+        console.log('🎯 Drop monitor info:', {
+          canDrop: monitor.canDrop(),
+          isOver: monitor.isOver(),
+          didDrop: monitor.didDrop()
+        })
+      }
       
       const canvasRect = canvasRef.current?.getBoundingClientRect()
       const clientOffset = monitor.getClientOffset()
       
       if (!canvasRect || !clientOffset) {
-        console.log('⚠️ Drop failed: no canvas rect or client offset')
+        if (isDebugLoggingEnabled()) {
+          console.log('⚠️ Drop failed: no canvas rect or client offset')
+        }
         return
       }
       
@@ -126,12 +132,16 @@ export default function Game() {
         gridHeight,
       }
       
-      console.log('✅ Asset instance created:', newAssetInstance)
+      if (isDebugLoggingEnabled()) {
+        console.log('✅ Asset instance created:', newAssetInstance)
+      }
       addAssetInstance(newAssetInstance)
       return { success: true } // Return success result to drag source
     },
     hover: (item, monitor) => {
-      console.log('🔍 Asset hovering over drop zone:', item.asset.name)
+      if (isDebugLoggingEnabled()) {
+        console.log('🔍 Asset hovering over drop zone:', item.asset.name)
+      }
     },
     collect: (monitor) => ({
       isOver: !!monitor.isOver(),
@@ -402,12 +412,18 @@ export default function Game() {
         const prevAlpha = ctx.globalAlpha
         ctx.globalAlpha = tileData.opacity
         
-        // Use blended tile renderer for floor tiles if blending is enabled, regular renderer otherwise
-        if (tileData.layer === 'floor' && isTileBlendingEnabled) {
-          renderTileWithBlending(ctx, tx, ty, tileData.tileType as string, sx, sy, size, tiles, tileData.layer)
-        } else {
-          renderTile(ctx, tileData.tileType as string, sx, sy, size)
-        }
+        // Use smart tile renderer that automatically handles blending based on settings and context
+        renderSmartTile(
+          ctx,
+          tileData.tileType as string,
+          sx,
+          sy,
+          size,
+          tx, // tile coordinates for blending analysis
+          ty,
+          tiles, // tile data for neighbor analysis
+          tileData.layer // layer for blending rules
+        )
         
         ctx.globalAlpha = prevAlpha
       }
@@ -417,7 +433,17 @@ export default function Game() {
     let lastDrawTime = 0
     const maxFPS = 60 // Cap at 60 FPS for better performance
     
-    const drawAll = () => { 
+    // Zoom performance optimization
+    let zoomRAF = 0
+    let zoomDebounceTimer = 0
+    let isZooming = false
+    
+    const drawAll = () => {
+      let startTime = 0
+      if (isDebugLoggingEnabled()) {
+        startTime = performance.now()
+      }
+      
       drawGrid(); 
       drawTiles();
       
@@ -431,6 +457,15 @@ export default function Game() {
         tileSize: TILE
       }
       currentTool.renderPreview(renderContext)
+      
+      // Performance monitoring for debug mode
+      if (isDebugLoggingEnabled() && startTime > 0) {
+        const endTime = performance.now()
+        const renderTime = endTime - startTime
+        if (renderTime > 16) { // Log if render takes longer than one frame (16ms)
+          console.log(`🐌 Slow render: ${renderTime.toFixed(2)}ms (scale: ${scale.toFixed(2)}, tiles visible: ~${Math.round(Object.keys(useMapStore.getState().mapData.tiles.floor).length * 0.1)})`)
+        }
+      }
     }
     
     const scheduleDraw = () => {
@@ -445,6 +480,27 @@ export default function Game() {
           // Re-schedule if we're drawing too fast
           scheduleDraw()
         }
+      })
+    }
+    
+    // Optimized zoom drawing with throttling
+    const scheduleZoomDraw = () => {
+      isZooming = true
+      
+      // Cancel existing zoom animation frame
+      if (zoomRAF) cancelAnimationFrame(zoomRAF)
+      
+      // Throttle zoom redraws to 30 FPS for better performance during zoom
+      zoomRAF = requestAnimationFrame(() => {
+        drawAll()
+        
+        // Debounce final high-quality render
+        clearTimeout(zoomDebounceTimer)
+        zoomDebounceTimer = window.setTimeout(() => {
+          isZooming = false
+          // Final high-quality render after zoom stops
+          drawAll()
+        }, 150) // Wait 150ms after zoom stops for final render
       })
     }
 
@@ -605,6 +661,7 @@ export default function Game() {
         // Update the camera transform ref and state
         cameraTransformRef.current = { scale, offsetX, offsetY }
         setCameraTransform({ scale, offsetX, offsetY })
+        // Use optimized drawing for smooth panning
         scheduleDraw()
       } else {
         handleMove(px, py, e)
@@ -653,7 +710,9 @@ export default function Game() {
         // Update the camera transform ref and state
         cameraTransformRef.current = { scale, offsetX, offsetY }
         setCameraTransform({ scale, offsetX, offsetY })
-        scheduleDraw()
+        
+        // Use optimized zoom drawing for better performance
+        scheduleZoomDraw()
       }
     }
 
@@ -680,7 +739,11 @@ export default function Game() {
       canvas.removeEventListener('wheel', onWheel)
       canvas.removeEventListener('contextmenu', onContextMenu)
       window.removeEventListener('resize', resize)
+      
+      // Clean up animation frames and timers
       if (raf) cancelAnimationFrame(raf)
+      if (zoomRAF) cancelAnimationFrame(zoomRAF)
+      if (zoomDebounceTimer) clearTimeout(zoomDebounceTimer)
     }
   }, [isGridVisible, isSnapToGrid, layerSettings])
 
@@ -989,7 +1052,13 @@ export default function Game() {
       </div>
 
       {/* Canvas */}
-      <div className="stage" ref={drop}>
+      <div 
+        className="stage" 
+        ref={(el) => {
+          dropRef.current = el
+          drop(el)
+        }}
+      >
         <canvas 
           ref={(ref) => {
             canvasRef.current = ref

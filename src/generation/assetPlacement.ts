@@ -9,6 +9,9 @@ export interface AssetDefinition {
   src: string;
   width: number;
   height: number;
+  // Grid dimensions - how many grid cells this asset occupies
+  gridWidth?: number;
+  gridHeight?: number;
   // Placement constraints
   minSpacing?: number; // Minimum distance between instances of this asset
   maxDensity?: number; // Maximum instances per 100x100 area
@@ -306,6 +309,8 @@ function createAssetInstance(x: number, y: number, assetDef: AssetDefinition): A
     width: assetDef.width,
     height: assetDef.height,
     rotation: 0,
+    gridWidth: assetDef.gridWidth || Math.ceil(assetDef.width / 32),
+    gridHeight: assetDef.gridHeight || Math.ceil(assetDef.height / 32),
     selected: false
   };
 }

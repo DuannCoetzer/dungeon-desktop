@@ -5,6 +5,7 @@
 import type { TileType, Layer, TileMap, AssetInstance } from './store'
 import type { GenerationParameters } from './uiStore'
 import { generateMapData, type GenerationParams } from './generation'
+import { isDebugLoggingEnabled } from './store/settingsStore'
 
 export interface CharacterToken {
   id: string
@@ -138,17 +139,25 @@ export class MapProtocol {
 
   eraseTile(layer: Layer, x: number, y: number): void {
     const key = this.getTileKey(x, y)
-    console.log(`Protocol eraseTile: layer=${layer}, x=${x}, y=${y}, key=${key}`)
-    console.log('Tiles before erase:', Object.keys(this.mapData.tiles[layer]))
+    
+    if (isDebugLoggingEnabled()) {
+      console.log(`Protocol eraseTile: layer=${layer}, x=${x}, y=${y}, key=${key}`)
+      console.log('Tiles before erase:', Object.keys(this.mapData.tiles[layer]))
+    }
     
     const layerTiles = { ...this.mapData.tiles[layer] }
     const tileExists = key in layerTiles
-    console.log(`Tile exists: ${tileExists}, value:`, layerTiles[key])
+    
+    if (isDebugLoggingEnabled()) {
+      console.log(`Tile exists: ${tileExists}, value:`, layerTiles[key])
+    }
     
     delete layerTiles[key]
     this.mapData.tiles[layer] = layerTiles
     
-    console.log('Tiles after erase:', Object.keys(this.mapData.tiles[layer]))
+    if (isDebugLoggingEnabled()) {
+      console.log('Tiles after erase:', Object.keys(this.mapData.tiles[layer]))
+    }
     
     this.mapData.updatedAt = new Date().toISOString()
     this.notify()
@@ -300,7 +309,6 @@ export class MapProtocol {
         assetInstances: data.assetInstances,
         characters: data.characters,
         version: data.version || '1.0.0',
-        id: data.id,
         createdAt: data.createdAt || new Date().toISOString(),
         updatedAt: new Date().toISOString()
       }

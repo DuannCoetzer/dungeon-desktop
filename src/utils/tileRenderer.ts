@@ -11,6 +11,8 @@ import {
 } from '../assets'
 import type { Palette, Layer, TileMap } from '../store'
 import { useTileStore } from '../store/tileStore'
+import { useUIStore } from '../uiStore'
+import { isDebugLoggingEnabled } from '../store/settingsStore'
 import { 
   analyzeTileBlending, 
   getCachedBlendMask, 
@@ -34,6 +36,15 @@ export const TILE_IMAGE_MAP: Record<string, string> = {
 
 // Cache for loaded images
 const imageCache = new Map<string, HTMLImageElement>()
+
+// Simple render cache for performance during zoom operations
+interface RenderCacheEntry {
+  canvas: HTMLCanvasElement
+  lastUsed: number
+}
+const renderCache = new Map<string, RenderCacheEntry>()
+const CACHE_LIFETIME = 30000 // 30 seconds
+const MAX_CACHE_SIZE = 100 // Limit cache size to prevent memory issues
 
 // Load and cache an image
 export function loadTileImage(palette: Palette): Promise<HTMLImageElement> {
@@ -77,6 +88,48 @@ export function loadTileImage(palette: Palette): Promise<HTMLImageElement> {
 // Get cached image (returns null if not loaded)
 export function getCachedTileImage(tileId: string): HTMLImageElement | null {
   return imageCache.get(tileId) || null
+}
+
+// Cache management utilities
+function cleanupRenderCache(): void {
+  const now = Date.now()
+  for (const [key, entry] of renderCache.entries()) {
+    if (now - entry.lastUsed > CACHE_LIFETIME) {
+      renderCache.delete(key)
+    }
+  }
+  
+  // If cache is still too large, remove oldest entries
+  if (renderCache.size > MAX_CACHE_SIZE) {
+    const sortedEntries = Array.from(renderCache.entries())
+      .sort(([,a], [,b]) => a.lastUsed - b.lastUsed)
+    
+    while (renderCache.size > MAX_CACHE_SIZE * 0.8) { // Keep 80% of max
+      const [key] = sortedEntries.shift()!
+      renderCache.delete(key)
+    }
+  }
+}
+
+function getCachedRender(key: string, size: number): HTMLCanvasElement | null {
+  const entry = renderCache.get(key)
+  if (entry) {
+    entry.lastUsed = Date.now()
+    return entry.canvas
+  }
+  return null
+}
+
+function setCachedRender(key: string, canvas: HTMLCanvasElement): void {
+  // Clean cache if it's getting too big
+  if (renderCache.size >= MAX_CACHE_SIZE) {
+    cleanupRenderCache()
+  }
+  
+  renderCache.set(key, {
+    canvas: canvas.cloneNode(true) as HTMLCanvasElement,
+    lastUsed: Date.now()
+  })
 }
 
 // Preload all tile images (default and imported)
@@ -127,6 +180,39 @@ export function renderTile(
   }
 }
 
+// Smart tile renderer that automatically applies blending when appropriate
+export function renderSmartTile(
+  ctx: CanvasRenderingContext2D,
+  tileId: string,
+  x: number,
+  y: number,
+  size: number,
+  tileX?: number,
+  tileY?: number,
+  tiles?: Record<Layer, TileMap>,
+  layer: Layer = 'floor',
+  forceBlending: boolean = false
+): boolean {
+  // Check global blending setting from UI store
+  const globalBlendingEnabled = useUIStore?.getState?.()?.isTileBlendingEnabled ?? true
+  
+  // Only apply blending if:
+  // 1. Global blending is enabled OR forced
+  // 2. We have tile coordinates and tile data
+  // 3. It's a floor layer (blending primarily for floors)
+  const shouldBlend = (globalBlendingEnabled || forceBlending) && 
+                     tileX !== undefined && 
+                     tileY !== undefined && 
+                     tiles && 
+                     layer === 'floor'
+  
+  if (shouldBlend) {
+    return renderTileWithBlending(ctx, tileX!, tileY!, tileId, x, y, size, tiles, layer)
+  } else {
+    return renderTile(ctx, tileId, x, y, size)
+  }
+}
+
 // Render a tile with blending support
 export function renderTileWithBlending(
   ctx: CanvasRenderingContext2D,
@@ -139,6 +225,11 @@ export function renderTileWithBlending(
   tiles: Record<Layer, TileMap>,
   layer: Layer = 'floor'
 ): boolean {
+  let startTime = 0
+  if (isDebugLoggingEnabled()) {
+    startTime = performance.now()
+  }
+  
   // Analyze blending requirements first
   const blendInfo = analyzeTileBlending(tileX, tileY, tiles, layer)
   
@@ -147,11 +238,12 @@ export function renderTileWithBlending(
     return renderTile(ctx, tileId, x, y, size)
   }
   
-  
   // Get the base tile image
   const baseImg = getCachedTileImage(tileId)
   if (!baseImg) {
-    console.warn('Base tile image not found for:', tileId)
+    if (isDebugLoggingEnabled()) {
+      console.warn('Base tile image not found for:', tileId)
+    }
     return renderTile(ctx, tileId, x, y, size) // Fallback
   }
   
@@ -166,10 +258,11 @@ export function renderTileWithBlending(
     const neighborImg = getCachedTileImage(blend.neighborTile)
     
     if (!neighborImg) {
-      console.warn('Neighbor tile image not found for:', blend.neighborTile)
+      if (isDebugLoggingEnabled()) {
+        console.warn('Neighbor tile image not found for:', blend.neighborTile)
+      }
       continue
     }
-    
     
     // Use the existing blend mask from the blending service
     const blendMask = getCachedBlendMask(blend.direction as any, blend.blendStrength, size)
@@ -196,6 +289,15 @@ export function renderTileWithBlending(
     ctx.drawImage(tempCanvas, x, y, size, size)
     
     ctx.restore()
+  }
+  
+  // Performance monitoring for blending operations
+  if (isDebugLoggingEnabled() && startTime > 0) {
+    const endTime = performance.now()
+    const blendTime = endTime - startTime
+    if (blendTime > 5) { // Log if blending takes longer than 5ms
+      console.log(`🌨️ Slow blend: ${blendTime.toFixed(2)}ms for tile ${tileId} with ${blendInfo?.blends.length || 0} blends`)
+    }
   }
   
   ctx.restore()

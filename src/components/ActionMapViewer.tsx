@@ -3,7 +3,8 @@ import { useDrop } from 'react-dnd'
 import type { MapData } from '../protocol'
 import type { PendingCharacter } from '../store/dmGameStore'
 import { useAssetStore } from '../store/assetStore'
-import { renderTile, preloadAllTileImages } from '../utils/tileRenderer'
+import { renderTile, preloadAllTileImages, renderSmartTile } from '../utils/tileRenderer'
+import { isDebugLoggingEnabled } from '../store/settingsStore'
 import type { Palette } from '../store'
 import { computeVisibleTiles, parseTileKey } from '../utils/FOWCalculator'
 
@@ -39,10 +40,14 @@ export function ActionMapViewer({ mapData, onMoveCharacter, onPlaceCharacter, se
   const [{ isOver }, drop] = useDrop({
     accept: 'pending-character',
     drop: (item: { character: PendingCharacter }, monitor) => {
-      console.log('🎯 Drop detected for character:', item.character.name)
+      if (isDebugLoggingEnabled()) {
+        console.log('🎯 Drop detected for character:', item.character.name)
+      }
       
       if (!onPlaceCharacter) {
-        console.log('⚠️ No onPlaceCharacter handler provided')
+        if (isDebugLoggingEnabled()) {
+          console.log('⚠️ No onPlaceCharacter handler provided')
+        }
         return
       }
       
@@ -66,12 +71,14 @@ export function ActionMapViewer({ mapData, onMoveCharacter, onPlaceCharacter, se
       const gridX = Math.floor(worldX / TILE_SIZE)
       const gridY = Math.floor(worldY / TILE_SIZE)
       
-      console.log('🗺 Calculated drop position:', {
+      if (isDebugLoggingEnabled()) {
+        console.log('🗺 Calculated drop position:', {
         screen: { x: clientOffset.x, y: clientOffset.y },
         canvas: { x: canvasX, y: canvasY },
         world: { x: worldX, y: worldY },
         grid: { x: gridX, y: gridY }
       })
+      }
       
       // Check if placement is valid (not on a wall without an object/asset)
       const placementValid = isValidCharacterPlacement(gridX, gridY)
@@ -83,7 +90,8 @@ export function ActionMapViewer({ mapData, onMoveCharacter, onPlaceCharacter, se
       const wallTileType = mapData.tiles.walls?.[tileKey] || 'none'
       const objectTileType = mapData.tiles.objects?.[tileKey] || 'none'
       
-      console.log('🔍 Character placement validation:', {
+      if (isDebugLoggingEnabled()) {
+        console.log('🔍 Character placement validation:', {
         gridX, gridY,
         valid: placementValid,
         hasWallType,
@@ -95,14 +103,19 @@ export function ActionMapViewer({ mapData, onMoveCharacter, onPlaceCharacter, se
         hasObject: !!(mapData.tiles.objects && mapData.tiles.objects[tileKey]),
         hasAsset: !!(mapData.assetInstances && mapData.assetInstances.some(asset => asset.x === gridX && asset.y === gridY))
       })
+      }
       
       if (!placementValid) {
-        console.log('❌ Invalid character placement: Cannot place character on wall tile without object/asset')
+        if (isDebugLoggingEnabled()) {
+          console.log('❌ Invalid character placement: Cannot place character on wall tile without object/asset')
+        }
         return
       }
       
       // Place the character
-      console.log('✅ Placing character:', item.character.name, 'at position:', gridX, gridY)
+      if (isDebugLoggingEnabled()) {
+        console.log('✅ Placing character:', item.character.name, 'at position:', gridX, gridY)
+      }
       onPlaceCharacter(item.character.id, gridX, gridY)
       return { success: true } // Return success result
     },
@@ -240,13 +253,17 @@ export function ActionMapViewer({ mapData, onMoveCharacter, onPlaceCharacter, se
           const [x, y] = key.split(',').map(Number)
           const size = Math.ceil(TILE_SIZE * viewport.scale)
           
-          // Use the proper tile renderer with textures
-          const rendered = renderTile(
+          // Use the smart tile renderer with automatic blending
+          const rendered = renderSmartTile(
             ctx,
-            tileType as Palette,
+            tileType as string,
             x * TILE_SIZE,
             y * TILE_SIZE,
-            TILE_SIZE
+            TILE_SIZE,
+            x, // tile coordinates for blending
+            y,
+            mapData.tiles, // tile data for neighbor analysis
+            'floor' // layer type
           )
           
           // If image didn't render (not loaded), it falls back to color automatically
@@ -295,13 +312,17 @@ export function ActionMapViewer({ mapData, onMoveCharacter, onPlaceCharacter, se
         for (const [key, tileType] of Object.entries(mapData.tiles.walls)) {
           const [x, y] = key.split(',').map(Number)
           
-          // Use the proper tile renderer with textures
-          const rendered = renderTile(
+          // Use the smart tile renderer with automatic blending
+          const rendered = renderSmartTile(
             ctx,
-            tileType as Palette,
+            tileType as string,
             x * TILE_SIZE,
             y * TILE_SIZE,
-            TILE_SIZE
+            TILE_SIZE,
+            x, // tile coordinates for blending
+            y,
+            mapData.tiles, // tile data for neighbor analysis
+            'walls' // layer type
           )
           
           // If image didn't render (not loaded), it falls back to color automatically

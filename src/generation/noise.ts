@@ -276,8 +276,9 @@ export function generateMapData(params: GenerationParams): MapData {
     floor: {},
     walls: {},
     objects: {},
-    assets: {}
-  };
+    assets: {},
+    fog: {},
+  }
   
   // Convert biomes to tiles
   for (let y = 0; y < biomeMap.height; y++) {
@@ -413,7 +414,8 @@ export function generateAdvancedTerrain(params: GenerationParams & {
     floor: {},
     walls: {},
     objects: {},
-    assets: {}
+    assets: {},
+    fog: {}
   };
   
   for (let y = 0; y < biomeMap.height; y++) {

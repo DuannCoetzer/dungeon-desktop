@@ -37,7 +37,8 @@ export class DMGameProtocol {
         floor: {},
         walls: {},
         objects: {},
-        assets: {}
+        assets: {},
+        fog: {},
       },
       assetInstances: [],
       characters: [],
@@ -144,7 +145,6 @@ export class DMGameProtocol {
         assetInstances: data.assetInstances,
         characters: data.characters,
         version: data.version || '1.0.0',
-        id: data.id,
         createdAt: data.createdAt || new Date().toISOString(),
         updatedAt: new Date().toISOString()
       }

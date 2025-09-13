@@ -56,11 +56,15 @@ export function ImageMapImporter({ onClose, onImported }: ImageMapImporterProps)
           tiles: {
             floor: {},
             walls: {},
-            objects: {}
+            objects: {},
+            assets: {},
+            fog: {},
           },
           assetInstances: [],
           characters: [],
-          version: '1.0.0'
+          version: '1.0.0',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
         }
         
         // Convert pixels to tiles
