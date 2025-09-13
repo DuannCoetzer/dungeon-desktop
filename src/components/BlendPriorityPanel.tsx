@@ -9,22 +9,55 @@ export function BlendPriorityPanel({ className = '' }: BlendPriorityPanelProps) 
   const tileStore = useTileStore()
   const allTiles = useAllTiles()
   const [selectedTileId, setSelectedTileId] = useState<string>('')
+  const [pendingChanges, setPendingChanges] = useState<Record<string, number>>({})
+  const [isApplying, setIsApplying] = useState(false)
   
   // Only show floor tiles that can blend
   const floorTiles = allTiles.filter(tile => tile.category === 'floors')
   const selectedTile = floorTiles.find(t => t.id === selectedTileId)
   
-  const handlePriorityChange = async (tileId: string, newPriority: number) => {
-    await tileStore.updateTile(tileId, { blendPriority: newPriority })
+  // Get the effective priority (pending change or current value)
+  const getEffectivePriority = (tileId: string) => {
+    return pendingChanges[tileId] !== undefined ? pendingChanges[tileId] : (allTiles.find(t => t.id === tileId)?.blendPriority || 1)
+  }
+  
+  const handlePriorityChange = (tileId: string, newPriority: number) => {
+    setPendingChanges(prev => ({ ...prev, [tileId]: newPriority }))
   }
   
   const handlePriorityClick = (currentPriority: number, increment: boolean) => {
     if (!selectedTile) return
     const newPriority = increment 
-      ? Math.min(10, (currentPriority || 1) + 1)
-      : Math.max(0, (currentPriority || 1) - 1)
+      ? Math.min(10, currentPriority + 1)
+      : Math.max(0, currentPriority - 1)
     handlePriorityChange(selectedTile.id, newPriority)
   }
+  
+  const applyChanges = async () => {
+    if (Object.keys(pendingChanges).length === 0) return
+    
+    setIsApplying(true)
+    try {
+      // Apply all pending changes at once
+      for (const [tileId, priority] of Object.entries(pendingChanges)) {
+        await tileStore.updateTile(tileId, { blendPriority: priority })
+      }
+      
+      // Clear pending changes after successful application
+      setPendingChanges({})
+    } catch (error) {
+      console.error('Failed to apply blend priority changes:', error)
+      alert('Failed to apply changes. Please try again.')
+    } finally {
+      setIsApplying(false)
+    }
+  }
+  
+  const discardChanges = () => {
+    setPendingChanges({})
+  }
+  
+  const hasPendingChanges = Object.keys(pendingChanges).length > 0
   
   return (
     <div className={`blend-priority-panel ${className}`} style={{
@@ -80,7 +113,7 @@ export function BlendPriorityPanel({ className = '' }: BlendPriorityPanelProps) 
               overflow: 'hidden',
               transition: 'all 0.2s ease'
             }}
-            title={`${tile.name} (Priority: ${tile.blendPriority || 1})`}
+            title={`${tile.name} (Priority: ${getEffectivePriority(tile.id)}${pendingChanges[tile.id] !== undefined ? ' - PENDING' : ''})`}
           >
             <img
               src={tile.thumb || tile.src}
@@ -97,16 +130,17 @@ export function BlendPriorityPanel({ className = '' }: BlendPriorityPanelProps) 
               position: 'absolute',
               bottom: '2px',
               right: '2px',
-              background: 'rgba(0, 0, 0, 0.8)',
-              color: '#fff',
+              background: pendingChanges[tile.id] !== undefined ? 'rgba(251, 191, 36, 0.9)' : 'rgba(0, 0, 0, 0.8)',
+              color: pendingChanges[tile.id] !== undefined ? '#000' : '#fff',
               fontSize: '10px',
               fontWeight: '600',
               padding: '2px 4px',
               borderRadius: '3px',
               minWidth: '16px',
-              textAlign: 'center'
+              textAlign: 'center',
+              border: pendingChanges[tile.id] !== undefined ? '1px solid #f59e0b' : 'none'
             }}>
-              {tile.blendPriority || 1}
+              {getEffectivePriority(tile.id)}
             </div>
           </div>
         ))}
@@ -148,9 +182,12 @@ export function BlendPriorityPanel({ className = '' }: BlendPriorityPanelProps) 
               </div>
               <div style={{
                 fontSize: '10px',
-                color: '#888'
+                color: pendingChanges[selectedTile.id] !== undefined ? '#f59e0b' : '#888'
               }}>
-                Current Priority: {selectedTile.blendPriority || 1}
+                {pendingChanges[selectedTile.id] !== undefined ? 'Pending' : 'Current'} Priority: {getEffectivePriority(selectedTile.id)}
+                {pendingChanges[selectedTile.id] !== undefined && (
+                  <span style={{ color: '#888', marginLeft: '8px' }}>was {selectedTile.blendPriority || 1}</span>
+                )}
               </div>
             </div>
           </div>
@@ -163,18 +200,18 @@ export function BlendPriorityPanel({ className = '' }: BlendPriorityPanelProps) 
             justifyContent: 'center'
           }}>
             <button
-              onClick={() => handlePriorityClick(selectedTile.blendPriority || 1, false)}
-              disabled={(selectedTile.blendPriority || 1) <= 0}
+              onClick={() => handlePriorityClick(getEffectivePriority(selectedTile.id), false)}
+              disabled={getEffectivePriority(selectedTile.id) <= 0}
               style={{
                 width: '32px',
                 height: '32px',
-                background: (selectedTile.blendPriority || 1) <= 0 ? '#333' : '#dc2626',
+                background: getEffectivePriority(selectedTile.id) <= 0 ? '#333' : '#dc2626',
                 border: 'none',
                 borderRadius: '4px',
                 color: '#fff',
                 fontSize: '16px',
                 fontWeight: '600',
-                cursor: (selectedTile.blendPriority || 1) <= 0 ? 'not-allowed' : 'pointer',
+                cursor: getEffectivePriority(selectedTile.id) <= 0 ? 'not-allowed' : 'pointer',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -190,28 +227,28 @@ export function BlendPriorityPanel({ className = '' }: BlendPriorityPanelProps) 
               textAlign: 'center',
               fontSize: '18px',
               fontWeight: '600',
-              color: '#7c8cff',
+              color: pendingChanges[selectedTile.id] !== undefined ? '#f59e0b' : '#7c8cff',
               padding: '8px 16px',
-              background: '#141821',
-              border: '1px solid #2a3441',
+              background: pendingChanges[selectedTile.id] !== undefined ? '#fef3c7' : '#141821',
+              border: `1px solid ${pendingChanges[selectedTile.id] !== undefined ? '#f59e0b' : '#2a3441'}`,
               borderRadius: '4px'
             }}>
-              {selectedTile.blendPriority || 1}
+              {getEffectivePriority(selectedTile.id)}
             </div>
             
             <button
-              onClick={() => handlePriorityClick(selectedTile.blendPriority || 1, true)}
-              disabled={(selectedTile.blendPriority || 1) >= 10}
+              onClick={() => handlePriorityClick(getEffectivePriority(selectedTile.id), true)}
+              disabled={getEffectivePriority(selectedTile.id) >= 10}
               style={{
                 width: '32px',
                 height: '32px',
-                background: (selectedTile.blendPriority || 1) >= 10 ? '#333' : '#059669',
+                background: getEffectivePriority(selectedTile.id) >= 10 ? '#333' : '#059669',
                 border: 'none',
                 borderRadius: '4px',
                 color: '#fff',
                 fontSize: '16px',
                 fontWeight: '600',
-                cursor: (selectedTile.blendPriority || 1) >= 10 ? 'not-allowed' : 'pointer',
+                cursor: getEffectivePriority(selectedTile.id) >= 10 ? 'not-allowed' : 'pointer',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -234,6 +271,71 @@ export function BlendPriorityPanel({ className = '' }: BlendPriorityPanelProps) 
             <div><strong>Guidelines:</strong></div>
             <div>Grass: 1 • Stone: 2-3 • Wood: 4 • Cobblestone: 5 • Walls: 10</div>
           </div>
+          
+          {/* Apply/Discard Changes */}
+          {hasPendingChanges && (
+            <div style={{
+              marginTop: '16px',
+              padding: '12px',
+              background: '#fef3c7',
+              border: '1px solid #f59e0b',
+              borderRadius: '6px',
+              color: '#92400e'
+            }}>
+              <div style={{
+                fontSize: '12px',
+                fontWeight: '600',
+                marginBottom: '8px',
+                textAlign: 'center'
+              }}>
+                📝 {Object.keys(pendingChanges).length} Pending Change{Object.keys(pendingChanges).length !== 1 ? 's' : ''}
+              </div>
+              
+              <div style={{
+                display: 'flex',
+                gap: '8px',
+                justifyContent: 'center'
+              }}>
+                <button
+                  onClick={discardChanges}
+                  disabled={isApplying}
+                  style={{
+                    padding: '6px 12px',
+                    background: '#e5e7eb',
+                    border: '1px solid #d1d5db',
+                    borderRadius: '4px',
+                    color: '#374151',
+                    fontSize: '11px',
+                    cursor: isApplying ? 'not-allowed' : 'pointer',
+                    fontWeight: '500',
+                    opacity: isApplying ? 0.6 : 1
+                  }}
+                  title="Discard all pending changes"
+                >
+                  Discard
+                </button>
+                
+                <button
+                  onClick={applyChanges}
+                  disabled={isApplying}
+                  style={{
+                    padding: '6px 12px',
+                    background: isApplying ? '#9ca3af' : '#059669',
+                    border: '1px solid #047857',
+                    borderRadius: '4px',
+                    color: '#fff',
+                    fontSize: '11px',
+                    cursor: isApplying ? 'not-allowed' : 'pointer',
+                    fontWeight: '500',
+                    transition: 'background-color 0.2s'
+                  }}
+                  title="Apply all pending changes"
+                >
+                  {isApplying ? 'Applying...' : 'Apply Changes'}
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
       
