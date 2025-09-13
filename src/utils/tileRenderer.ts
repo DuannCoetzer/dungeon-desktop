@@ -370,7 +370,8 @@ export function renderTileWithBlending(
       tiles[layer][`${tileX+1},${tileY+1}`] || ''  // se
     ]
     const tilePattern = neighborTiles.join('|')
-    const cacheKey = `${tileId}_${tileX}_${tileY}_${size}_${tilePattern}`
+    // Create size-independent cache key so zoom levels can reuse cached blends
+    const cacheKey = `${tileId}_${tileX}_${tileY}_${tilePattern}`
     
     if (isDebugLoggingEnabled()) {
       console.log('🔍 Cache lookup for tile:', tileId, 'at', tileX, tileY, 'size:', size)
@@ -382,11 +383,12 @@ export function renderTileWithBlending(
     
     if (cachedCanvas) {
       if (isDebugLoggingEnabled()) {
-        console.log('🎯 CACHE HIT: Using cached blended tile at', tileX, tileY, 'size:', size, 'key:', cacheKey)
+        console.log('🎯 CACHE HIT: Using cached blended tile at', tileX, tileY, 'cached size:', cachedCanvas.width, 'display size:', size)
       }
       ctx.globalAlpha = 1.0
       ctx.globalCompositeOperation = 'source-over'
-      ctx.drawImage(cachedCanvas, x, y)
+      // Scale the cached canvas to the requested size
+      ctx.drawImage(cachedCanvas, x, y, size, size)
       return true
     }
     
@@ -399,13 +401,14 @@ export function renderTileWithBlending(
       return renderTile(ctx, tileId, x, y, size) // Fallback
     }
   
-  // Create offscreen canvas for caching the blended result
+  // Create offscreen canvas for caching at standard size (independent of zoom)
+  const STANDARD_CACHE_SIZE = 64 // Fixed size for all cached blends
   const offscreenCanvas = document.createElement('canvas')
-  offscreenCanvas.width = size
-  offscreenCanvas.height = size
+  offscreenCanvas.width = STANDARD_CACHE_SIZE
+  offscreenCanvas.height = STANDARD_CACHE_SIZE
   const offscreenCtx = offscreenCanvas.getContext('2d')!
-  // First, render the base tile to offscreen canvas
-  offscreenCtx.drawImage(baseImg, 0, 0, size, size)
+  // First, render the base tile to offscreen canvas at standard size
+  offscreenCtx.drawImage(baseImg, 0, 0, STANDARD_CACHE_SIZE, STANDARD_CACHE_SIZE)
   
   // Apply each blend to offscreen canvas
   for (const blend of blendInfo.blends) {
@@ -417,28 +420,28 @@ export function renderTileWithBlending(
       continue
     }
     
-    const blendMask = getCachedBlendMask(blend.direction as any, blend.blendStrength, size)
+    const blendMask = getCachedBlendMask(blend.direction as any, blend.blendStrength, STANDARD_CACHE_SIZE)
     
     // Use simple hard blending with composite operations
     offscreenCtx.save()
     
-    // Create masked neighbor tile
+    // Create masked neighbor tile at standard cache size
     const tempCanvas = document.createElement('canvas')
-    tempCanvas.width = size
-    tempCanvas.height = size
+    tempCanvas.width = STANDARD_CACHE_SIZE
+    tempCanvas.height = STANDARD_CACHE_SIZE
     const tempCtx = tempCanvas.getContext('2d')!
     
-    // Draw neighbor tile
-    tempCtx.drawImage(neighborImg, 0, 0, size, size)
+    // Draw neighbor tile at standard cache size
+    tempCtx.drawImage(neighborImg, 0, 0, STANDARD_CACHE_SIZE, STANDARD_CACHE_SIZE)
     
     // Apply mask to cut out the blend area
     tempCtx.globalCompositeOperation = 'destination-in'
-    tempCtx.drawImage(blendMask, 0, 0, size, size)
+    tempCtx.drawImage(blendMask, 0, 0, STANDARD_CACHE_SIZE, STANDARD_CACHE_SIZE)
     
     // Draw the masked neighbor over the base with full opacity
     offscreenCtx.globalAlpha = 1.0  // Full opacity for hard blend
     offscreenCtx.globalCompositeOperation = 'source-over'
-    offscreenCtx.drawImage(tempCanvas, 0, 0, size, size)
+    offscreenCtx.drawImage(tempCanvas, 0, 0, STANDARD_CACHE_SIZE, STANDARD_CACHE_SIZE)
     
     offscreenCtx.restore()
   }
@@ -446,13 +449,13 @@ export function renderTileWithBlending(
   // Cache the blended result with the full cache key
   setCachedRender(cacheKey, offscreenCanvas, blendedTileCache, tilePattern)
   
-  // Draw the cached result to main context
+  // Draw the cached result to main context, scaling to requested size
   ctx.globalAlpha = 1.0
   ctx.globalCompositeOperation = 'source-over'
-  ctx.drawImage(offscreenCanvas, x, y)
+  ctx.drawImage(offscreenCanvas, x, y, size, size)
   
   if (isDebugLoggingEnabled()) {
-    console.log('🎨 CACHE MISS: Created and cached blended tile at', tileX, tileY, 'size:', size, 'with', blendInfo.blends.length, 'blends')
+    console.log('🎨 CACHE MISS: Created and cached blended tile at', tileX, tileY, 'cache size:', STANDARD_CACHE_SIZE, 'display size:', size, 'with', blendInfo.blends.length, 'blends')
     console.log('🔑 Cache key:', cacheKey)
     console.log('📊 Cache size:', blendedTileCache.size, 'entries')
   }
