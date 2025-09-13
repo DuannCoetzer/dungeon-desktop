@@ -385,10 +385,21 @@ export function renderTileWithBlending(
       if (isDebugLoggingEnabled()) {
         console.log('🎯 CACHE HIT: Using cached blended tile at', tileX, tileY, 'cached size:', cachedCanvas.width, 'display size:', size)
       }
+      
+      // Configure image smoothing for pixel-perfect scaling
+      const originalSmoothing = ctx.imageSmoothingEnabled
+      const originalQuality = ctx.imageSmoothingQuality
+      ctx.imageSmoothingEnabled = false
+      ctx.imageSmoothingQuality = 'high'
+      
       ctx.globalAlpha = 1.0
       ctx.globalCompositeOperation = 'source-over'
       // Scale the cached canvas to the requested size
       ctx.drawImage(cachedCanvas, x, y, size, size)
+      
+      // Restore original smoothing settings
+      ctx.imageSmoothingEnabled = originalSmoothing
+      ctx.imageSmoothingQuality = originalQuality
       return true
     }
     
@@ -401,8 +412,8 @@ export function renderTileWithBlending(
       return renderTile(ctx, tileId, x, y, size) // Fallback
     }
   
-  // Create offscreen canvas for caching at standard size (independent of zoom)
-  const STANDARD_CACHE_SIZE = 64 // Fixed size for all cached blends
+  // Use high resolution cache for better quality when scaling
+  const STANDARD_CACHE_SIZE = 256 // High-res cache to minimize scaling artifacts
   const offscreenCanvas = document.createElement('canvas')
   offscreenCanvas.width = STANDARD_CACHE_SIZE
   offscreenCanvas.height = STANDARD_CACHE_SIZE
@@ -450,9 +461,18 @@ export function renderTileWithBlending(
   setCachedRender(cacheKey, offscreenCanvas, blendedTileCache, tilePattern)
   
   // Draw the cached result to main context, scaling to requested size
+  const originalSmoothing = ctx.imageSmoothingEnabled
+  const originalQuality = ctx.imageSmoothingQuality
+  ctx.imageSmoothingEnabled = false  // Pixel-perfect scaling
+  ctx.imageSmoothingQuality = 'high'
+  
   ctx.globalAlpha = 1.0
   ctx.globalCompositeOperation = 'source-over'
   ctx.drawImage(offscreenCanvas, x, y, size, size)
+  
+  // Restore original smoothing settings
+  ctx.imageSmoothingEnabled = originalSmoothing
+  ctx.imageSmoothingQuality = originalQuality
   
   if (isDebugLoggingEnabled()) {
     console.log('🎨 CACHE MISS: Created and cached blended tile at', tileX, tileY, 'cache size:', STANDARD_CACHE_SIZE, 'display size:', size, 'with', blendInfo.blends.length, 'blends')
