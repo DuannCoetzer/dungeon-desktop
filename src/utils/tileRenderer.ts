@@ -358,20 +358,31 @@ export function renderTileWithBlending(
   }
   
   try {
-    // Check cache first - make sure cache key includes size for zoom levels
-    const neighborBounds = { 
-      left: tileX - 1, 
-      top: tileY - 1, 
-      right: tileX + 1, 
-      bottom: tileY + 1 
+    // Create a simpler, more stable cache key based on tile configuration
+    const neighborTiles = [
+      tiles[layer][`${tileX-1},${tileY}`] || '', // west
+      tiles[layer][`${tileX+1},${tileY}`] || '', // east  
+      tiles[layer][`${tileX},${tileY-1}`] || '', // north
+      tiles[layer][`${tileX},${tileY+1}`] || '', // south
+      tiles[layer][`${tileX-1},${tileY-1}`] || '', // nw
+      tiles[layer][`${tileX+1},${tileY-1}`] || '', // ne
+      tiles[layer][`${tileX-1},${tileY+1}`] || '', // sw
+      tiles[layer][`${tileX+1},${tileY+1}`] || ''  // se
+    ]
+    const tilePattern = neighborTiles.join('|')
+    const cacheKey = `${tileId}_${tileX}_${tileY}_${size}_${tilePattern}`
+    
+    if (isDebugLoggingEnabled()) {
+      console.log('🔍 Cache lookup for tile:', tileId, 'at', tileX, tileY, 'size:', size)
+      console.log('🔑 Pattern:', tilePattern)
+      console.log('🔑 Generated cache key (first 60 chars):', cacheKey.substring(0, 60) + '...')
     }
-    const tileDataHash = createTileDataHash(tiles, neighborBounds)
-    const cacheKey = `${tileId}_${tileX}_${tileY}_${size}_${tileDataHash}`
-    const cachedCanvas = getCachedRender(cacheKey, blendedTileCache, tileDataHash)
+    
+    const cachedCanvas = getCachedRender(cacheKey, blendedTileCache, tilePattern)
     
     if (cachedCanvas) {
       if (isDebugLoggingEnabled()) {
-        console.log('🎯 Using cached blended tile at', tileX, tileY)
+        console.log('🎯 CACHE HIT: Using cached blended tile at', tileX, tileY, 'size:', size, 'key:', cacheKey)
       }
       ctx.globalAlpha = 1.0
       ctx.globalCompositeOperation = 'source-over'
@@ -433,7 +444,7 @@ export function renderTileWithBlending(
   }
   
   // Cache the blended result with the full cache key
-  setCachedRender(cacheKey, offscreenCanvas, blendedTileCache, tileDataHash)
+  setCachedRender(cacheKey, offscreenCanvas, blendedTileCache, tilePattern)
   
   // Draw the cached result to main context
   ctx.globalAlpha = 1.0
@@ -441,7 +452,9 @@ export function renderTileWithBlending(
   ctx.drawImage(offscreenCanvas, x, y)
   
   if (isDebugLoggingEnabled()) {
-    console.log('🎨 Created and cached blended tile at', tileX, tileY, 'with', blendInfo.blends.length, 'blends')
+    console.log('🎨 CACHE MISS: Created and cached blended tile at', tileX, tileY, 'size:', size, 'with', blendInfo.blends.length, 'blends')
+    console.log('🔑 Cache key:', cacheKey)
+    console.log('📊 Cache size:', blendedTileCache.size, 'entries')
   }
   
     // Performance monitoring for blending operations
