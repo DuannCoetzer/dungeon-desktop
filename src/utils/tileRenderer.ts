@@ -226,11 +226,14 @@ export function invalidateTileCache(tileX?: number, tileY?: number): void {
   if (tileX !== undefined && tileY !== undefined) {
     // Invalidate specific area
     const affectedKeys = Array.from(blendedTileCache.keys()).filter(key => {
-      const [, x, y] = key.split('_')
-      const tx = parseInt(x)
-      const ty = parseInt(y)
-      // Invalidate the changed tile and its neighbors (for blending)
-      return Math.abs(tx - tileX) <= 1 && Math.abs(ty - tileY) <= 1
+      const parts = key.split('_')
+      if (parts.length >= 3) {
+        const tx = parseInt(parts[1])
+        const ty = parseInt(parts[2])
+        // Invalidate the changed tile and its neighbors (for blending)
+        return Math.abs(tx - tileX) <= 1 && Math.abs(ty - tileY) <= 1
+      }
+      return false
     })
     
     affectedKeys.forEach(key => blendedTileCache.delete(key))
@@ -346,22 +349,6 @@ export function renderTileWithBlending(
     startTime = performance.now()
   }
   
-  // Create hash of local tile data for cache validation
-  const bounds = { 
-    left: tileX - 1, 
-    top: tileY - 1, 
-    right: tileX + 1, 
-    bottom: tileY + 1 
-  }
-  const dataHash = createTileDataHash(tiles, bounds)
-  
-  // Try to get cached blended tile first
-  const cachedTile = getCachedBlendedTile(tileId, tileX, tileY, size, dataHash)
-  if (cachedTile) {
-    ctx.drawImage(cachedTile, x, y)
-    return true
-  }
-  
   // Analyze blending requirements
   const blendInfo = analyzeTileBlending(tileX, tileY, tiles, layer)
   
@@ -370,25 +357,46 @@ export function renderTileWithBlending(
     return renderTile(ctx, tileId, x, y, size)
   }
   
-  // Get the base tile image
-  const baseImg = getCachedTileImage(tileId)
-  if (!baseImg) {
-    if (isDebugLoggingEnabled()) {
-      console.warn('Base tile image not found for:', tileId)
+  try {
+    // Check cache first - make sure cache key includes size for zoom levels
+    const neighborBounds = { 
+      left: tileX - 1, 
+      top: tileY - 1, 
+      right: tileX + 1, 
+      bottom: tileY + 1 
     }
-    return renderTile(ctx, tileId, x, y, size) // Fallback
-  }
+    const tileDataHash = createTileDataHash(tiles, neighborBounds)
+    const cacheKey = `${tileId}_${tileX}_${tileY}_${size}_${tileDataHash}`
+    const cachedCanvas = getCachedRender(cacheKey, blendedTileCache, tileDataHash)
+    
+    if (cachedCanvas) {
+      if (isDebugLoggingEnabled()) {
+        console.log('🎯 Using cached blended tile at', tileX, tileY)
+      }
+      ctx.globalAlpha = 1.0
+      ctx.globalCompositeOperation = 'source-over'
+      ctx.drawImage(cachedCanvas, x, y)
+      return true
+    }
+    
+    // Get the base tile image
+    const baseImg = getCachedTileImage(tileId)
+    if (!baseImg) {
+      if (isDebugLoggingEnabled()) {
+        console.warn('Base tile image not found for:', tileId)
+      }
+      return renderTile(ctx, tileId, x, y, size) // Fallback
+    }
   
-  // Create an offscreen canvas for cached result
-  const offscreen = document.createElement('canvas')
-  offscreen.width = size
-  offscreen.height = size
-  const offCtx = offscreen.getContext('2d')!
+  // Create offscreen canvas for caching the blended result
+  const offscreenCanvas = document.createElement('canvas')
+  offscreenCanvas.width = size
+  offscreenCanvas.height = size
+  const offscreenCtx = offscreenCanvas.getContext('2d')!
+  // First, render the base tile to offscreen canvas
+  offscreenCtx.drawImage(baseImg, 0, 0, size, size)
   
-  // First, render the base tile
-  offCtx.drawImage(baseImg, 0, 0, size, size)
-  
-  // Apply each blend
+  // Apply each blend to offscreen canvas
   for (const blend of blendInfo.blends) {
     const neighborImg = getCachedTileImage(blend.neighborTile)
     if (!neighborImg) {
@@ -400,37 +408,57 @@ export function renderTileWithBlending(
     
     const blendMask = getCachedBlendMask(blend.direction as any, blend.blendStrength, size)
     
-    // Masked neighbor tile
+    // Use simple hard blending with composite operations
+    offscreenCtx.save()
+    
+    // Create masked neighbor tile
     const tempCanvas = document.createElement('canvas')
     tempCanvas.width = size
     tempCanvas.height = size
     const tempCtx = tempCanvas.getContext('2d')!
+    
+    // Draw neighbor tile
     tempCtx.drawImage(neighborImg, 0, 0, size, size)
+    
+    // Apply mask to cut out the blend area
     tempCtx.globalCompositeOperation = 'destination-in'
     tempCtx.drawImage(blendMask, 0, 0, size, size)
     
-    // Draw onto offscreen result
-    offCtx.globalAlpha = 0.8
-    offCtx.globalCompositeOperation = 'source-over'
-    offCtx.drawImage(tempCanvas, 0, 0, size, size)
+    // Draw the masked neighbor over the base with full opacity
+    offscreenCtx.globalAlpha = 1.0  // Full opacity for hard blend
+    offscreenCtx.globalCompositeOperation = 'source-over'
+    offscreenCtx.drawImage(tempCanvas, 0, 0, size, size)
+    
+    offscreenCtx.restore()
   }
   
-  // Cache the result
-  setCachedBlendedTile(tileId, tileX, tileY, size, offscreen, dataHash)
+  // Cache the blended result with the full cache key
+  setCachedRender(cacheKey, offscreenCanvas, blendedTileCache, tileDataHash)
   
-  // Draw cached/offscreen result to main context
-  ctx.drawImage(offscreen, x, y)
+  // Draw the cached result to main context
+  ctx.globalAlpha = 1.0
+  ctx.globalCompositeOperation = 'source-over'
+  ctx.drawImage(offscreenCanvas, x, y)
   
-  // Performance monitoring for blending operations
-  if (isDebugLoggingEnabled() && startTime > 0) {
-    const endTime = performance.now()
-    const blendTime = endTime - startTime
-    if (blendTime > 5) {
-      console.log(`🌨️ Slow blend: ${blendTime.toFixed(2)}ms for tile ${tileId} with ${blendInfo?.blends.length || 0} blends (cached)`) 
+  if (isDebugLoggingEnabled()) {
+    console.log('🎨 Created and cached blended tile at', tileX, tileY, 'with', blendInfo.blends.length, 'blends')
+  }
+  
+    // Performance monitoring for blending operations
+    if (isDebugLoggingEnabled() && startTime > 0) {
+      const endTime = performance.now()
+      const blendTime = endTime - startTime
+      if (blendTime > 5) {
+        console.log(`🌨️ Slow blend: ${blendTime.toFixed(2)}ms for tile ${tileId} with ${blendInfo?.blends.length || 0} blends`)
+      }
     }
+    
+    return true
+  } catch (error) {
+    console.error('Error in blending logic:', error)
+    // Fallback to simple tile rendering
+    return renderTile(ctx, tileId, x, y, size)
   }
-  
-  return true
 }
 
 

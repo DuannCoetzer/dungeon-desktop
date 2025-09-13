@@ -3,6 +3,8 @@
  * across the main game view and export functionality
  */
 
+import { getCachedBackground, setCachedBackground } from './tileRenderer'
+
 /**
  * Creates a parchment texture pattern for canvas backgrounds
  * This function creates the same pattern used in the main game view
@@ -40,7 +42,7 @@ export function createParchmentPattern(ctx: CanvasRenderingContext2D): CanvasPat
 /**
  * Applies the parchment background to a canvas context
  * First applies the base color, then the texture pattern
- * Now uses caching for better performance during zoom operations
+ * Uses caching to improve performance on repeated draws
  */
 export function applyParchmentBackground(
   ctx: CanvasRenderingContext2D, 
@@ -48,44 +50,47 @@ export function applyParchmentBackground(
   height: number,
   useCache: boolean = true
 ): void {
-  // Try to use cached background if available and requested
-  if (useCache) {
-    const { getCachedBackground, setCachedBackground } = require('./tileRenderer')
-    const cached = getCachedBackground(width, height)
-    if (cached) {
-      ctx.drawImage(cached, 0, 0)
-      return
+  try {
+    // Try to get cached background if enabled
+    if (useCache) {
+      const cachedBackground = getCachedBackground(width, height)
+      if (cachedBackground) {
+        ctx.drawImage(cachedBackground, 0, 0)
+        console.log('📋 Using cached parchment background', width + 'x' + height)
+        return
+      }
     }
-  }
-  
-  // Create background from scratch
-  const needsCache = useCache
-  let targetCtx = ctx
-  let cacheCanvas: HTMLCanvasElement | null = null
-  
-  if (needsCache) {
-    // Render to offscreen canvas for caching
-    cacheCanvas = document.createElement('canvas')
-    cacheCanvas.width = width
-    cacheCanvas.height = height
-    targetCtx = cacheCanvas.getContext('2d')!
-  }
-  
-  // Apply base parchment color
-  targetCtx.fillStyle = '#fffef0'
-  targetCtx.fillRect(0, 0, width, height)
-  
-  // Apply parchment texture pattern
-  const pattern = createParchmentPattern(targetCtx)
-  if (pattern) {
-    targetCtx.fillStyle = pattern
-    targetCtx.fillRect(0, 0, width, height)
-  }
-  
-  // Cache and draw to main context if needed
-  if (needsCache && cacheCanvas) {
-    const { setCachedBackground } = require('./tileRenderer')
-    setCachedBackground(cacheCanvas, width, height, pattern)
-    ctx.drawImage(cacheCanvas, 0, 0)
+    
+    // Create new background (either not cached or cache miss)
+    const offscreenCanvas = document.createElement('canvas')
+    offscreenCanvas.width = width
+    offscreenCanvas.height = height
+    const offscreenCtx = offscreenCanvas.getContext('2d')!
+    
+    // Apply base parchment color
+    offscreenCtx.fillStyle = '#fffef0'
+    offscreenCtx.fillRect(0, 0, width, height)
+    
+    // Apply parchment texture pattern
+    const pattern = createParchmentPattern(offscreenCtx)
+    if (pattern) {
+      offscreenCtx.fillStyle = pattern
+      offscreenCtx.fillRect(0, 0, width, height)
+    }
+    
+    // Cache the result if caching is enabled
+    if (useCache) {
+      setCachedBackground(offscreenCanvas, width, height, pattern)
+      console.log('💾 Cached new parchment background', width + 'x' + height)
+    }
+    
+    // Draw to main canvas
+    ctx.drawImage(offscreenCanvas, 0, 0)
+    
+  } catch (error) {
+    console.error('Error applying parchment background:', error)
+    // Fallback to solid color
+    ctx.fillStyle = '#fffef0'
+    ctx.fillRect(0, 0, width, height)
   }
 }

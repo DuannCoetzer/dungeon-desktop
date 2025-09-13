@@ -32,6 +32,8 @@ export default function Game() {
   // Image map importer state
   const [isImageImporterOpen, setIsImageImporterOpen] = useState(false)
   const [isAboutOpen, setIsAboutOpen] = useState(false)
+  const [debugConsole, setDebugConsole] = useState<string[]>([])
+  const [showDebugConsole, setShowDebugConsole] = useState(false)
   
   // Tile store
   const tileStore = useTileStore()
@@ -244,12 +246,56 @@ export default function Game() {
   const toggleLayer = useMapStore(state => state.toggleLayer)
   const setLayerOpacity = useMapStore(state => state.setLayerOpacity)
 
+  // Intercept console logs for debug panel
+  useEffect(() => {
+    const originalConsoleLog = console.log
+    const originalConsoleError = console.error
+    const originalConsoleWarn = console.warn
+    
+    console.log = (...args: any[]) => {
+      originalConsoleLog(...args)
+      if (isDebugLoggingEnabled()) {
+        setDebugConsole(prev => [...prev.slice(-49), `LOG: ${args.join(' ')}`]) // Keep last 50 messages
+      }
+    }
+    
+    console.error = (...args: any[]) => {
+      originalConsoleError(...args)
+      setDebugConsole(prev => [...prev.slice(-49), `ERROR: ${args.join(' ')}`])
+    }
+    
+    console.warn = (...args: any[]) => {
+      originalConsoleWarn(...args)
+      setDebugConsole(prev => [...prev.slice(-49), `WARN: ${args.join(' ')}`])
+    }
+    
+    return () => {
+      console.log = originalConsoleLog
+      console.error = originalConsoleError
+      console.warn = originalConsoleWarn
+    }
+  }, [])
+
   // Preload tile images and initialize tile store on component mount
   useEffect(() => {
     preloadAllTileImages()
     
-    // Initialize tile store with default tiles
+  // Initialize tile store with default tiles
     tileStore.loadDefaultTiles()
+    
+    // Add keyboard shortcut for debug console (F12)
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'F12') {
+        e.preventDefault()
+        setShowDebugConsole(prev => !prev)
+      }
+    }
+    
+    document.addEventListener('keydown', handleKeyDown)
+    
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown)
+    }
   }, [])
 
   useEffect(() => {
@@ -324,13 +370,23 @@ export default function Game() {
     }
 
     const drawGrid = () => {
-      // Use optimized clear for better GPU performance
-      const devicePixelRatio = window.devicePixelRatio || 1
-      const rect = stage.getBoundingClientRect()
-      ctx.clearRect(0, 0, rect.width, rect.height)
-      
-      // Apply parchment background using shared utility
-      applyParchmentBackground(ctx, rect.width, rect.height)
+      try {
+        // Use optimized clear for better GPU performance
+        const devicePixelRatio = window.devicePixelRatio || 1
+        const rect = stage.getBoundingClientRect()
+        if (isDebugLoggingEnabled()) {
+          console.log('🎨 Drawing grid - Canvas size:', rect.width, 'x', rect.height)
+        }
+        ctx.clearRect(0, 0, rect.width, rect.height)
+        
+        // Apply parchment background using shared utility
+        if (isDebugLoggingEnabled()) {
+          console.log('🎨 Applying parchment background')
+        }
+        applyParchmentBackground(ctx, rect.width, rect.height)
+        if (isDebugLoggingEnabled()) {
+          console.log('✅ Parchment background applied')
+        }
       
       // Only draw grid lines if grid is visible
       const { isGridVisible } = useUIStore.getState()
@@ -358,13 +414,23 @@ export default function Game() {
           ctx.lineTo(rect.width, sy + 0.5)
         }
         ctx.stroke()
+        if (isDebugLoggingEnabled()) {
+          console.log('✅ Grid lines drawn')
+        }
+      }
+      } catch (error) {
+        console.error('❌ Error in drawGrid:', error)
       }
     }
 
     const drawTiles = () => {
-      const { tiles } = useMapStore.getState().mapData
-      const layerSettings = useMapStore.getState().layerSettings
-      const order: Array<keyof typeof tiles> = ['floor', 'walls', 'objects']
+      try {
+        const { tiles } = useMapStore.getState().mapData
+        const layerSettings = useMapStore.getState().layerSettings
+        const order: Array<keyof typeof tiles> = ['floor', 'walls', 'objects']
+        if (isDebugLoggingEnabled()) {
+          console.log('🎯 Drawing tiles - Total tiles:', Object.keys(tiles.floor).length + Object.keys(tiles.walls).length + Object.keys(tiles.objects).length)
+        }
       
       // Calculate viewport bounds for culling tiles outside view
       const rect = stage.getBoundingClientRect()
@@ -426,6 +492,12 @@ export default function Game() {
         )
         
         ctx.globalAlpha = prevAlpha
+      }
+      if (isDebugLoggingEnabled()) {
+        console.log('✅ All tiles rendered successfully')
+      }
+      } catch (error) {
+        console.error('❌ Error in drawTiles:', error)
       }
     }
 
@@ -731,7 +803,7 @@ export default function Game() {
     // Initial setup
     resize()
     
-    // Set up periodic cache cleanup (every 2 minutes)
+    // Enable cache cleanup to manage memory usage
     const cacheCleanupInterval = setInterval(() => {
       const { cleanupAllCaches } = require('../utils/tileRenderer')
       cleanupAllCaches()
@@ -753,7 +825,7 @@ export default function Game() {
       if (raf) cancelAnimationFrame(raf)
       if (zoomRAF) cancelAnimationFrame(zoomRAF)
       if (zoomDebounceTimer) clearTimeout(zoomDebounceTimer)
-      clearInterval(cacheCleanupInterval)
+      if (cacheCleanupInterval) clearInterval(cacheCleanupInterval)
     }
   }, [isGridVisible, isSnapToGrid, layerSettings])
 
@@ -1117,6 +1189,53 @@ export default function Game() {
       {/* About Modal */}
       {isAboutOpen && (
         <About onClose={() => setIsAboutOpen(false)} />
+      )}
+      
+      {/* Debug Console */}
+      {showDebugConsole && (
+        <div
+          style={{
+            position: 'fixed',
+            bottom: 0,
+            left: 0,
+            right: 0,
+            height: '300px',
+            backgroundColor: 'rgba(0, 0, 0, 0.9)',
+            color: '#ffffff',
+            zIndex: 10000,
+            padding: '10px',
+            fontFamily: 'monospace',
+            fontSize: '12px',
+            overflow: 'auto',
+            borderTop: '2px solid #333'
+          }}
+        >
+          <div style={{ marginBottom: '10px', borderBottom: '1px solid #333', paddingBottom: '5px' }}>
+            <strong>Debug Console (F12 to toggle)</strong>
+            <button
+              onClick={() => setDebugConsole([])}
+              style={{
+                float: 'right',
+                background: '#333',
+                border: 'none',
+                color: '#fff',
+                padding: '2px 8px',
+                fontSize: '10px',
+                cursor: 'pointer'
+              }}
+            >
+              Clear
+            </button>
+          </div>
+          {debugConsole.map((msg, i) => (
+            <div key={i} style={{ 
+              marginBottom: '2px', 
+              color: msg.startsWith('ERROR:') ? '#ff6b6b' : msg.startsWith('WARN:') ? '#ffa500' : '#fff' 
+            }}>
+              {msg}
+            </div>
+          ))}
+        </div>
       )}
     </div>
   )
