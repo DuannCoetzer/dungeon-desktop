@@ -252,10 +252,8 @@ export function createBlendMask(
   canvas.height = size
   const ctx = canvas.getContext('2d')!
   
-  // Set random seed for consistent patterns per direction+size combination
-  // This ensures the same blend mask is generated consistently
-  const seed = hashString(`${direction}-${size}`)
-  seedRandom(seed)
+  // Create deterministic blend masks for tilable patterns
+  // No random seeding needed - patterns are now mathematically consistent
   
   // Create organic curved blend mask
   createOrganicBlendMask(ctx, direction, size)
@@ -308,10 +306,10 @@ function createOrganicBlendMask(
   // Start with transparent canvas
   ctx.clearRect(0, 0, size, size)
   
-  // Generate organic curved path for blend zone
+  // Generate organic curved path for blend zone with tilable patterns
   const path = new Path2D()
-  const waveCount = 3 + seededRandom() * 2 // 3-5 waves
-  const amplitude = size * 0.12 // Wave amplitude (reduced for subtler effect)
+  const waveCount = 4 // Fixed wave count for tilable patterns
+  const amplitude = size * 0.06 // Reduced amplitude for more subtle, tilable blending
   
   switch (direction) {
     case BlendDirection.NORTH:
@@ -363,13 +361,14 @@ function createOrganicBlendZone(
       path.moveTo(0, 0)
       path.lineTo(size, 0)
       
-      // Create clean wavy bottom boundary of blend zone
+      // Create tilable wavy bottom boundary - start and end at same heights for seamless tiling
       for (let x = size; x >= 0; x -= 2) {
         const progress = x / size
-        const wave1 = Math.sin(progress * Math.PI * waveCount) * amplitude
-        const wave2 = Math.sin(progress * Math.PI * waveCount * 2.3) * amplitude * 0.2
+        // Use sine waves that complete full cycles for tilable patterns
+        const wave1 = Math.sin(progress * Math.PI * 2 * waveCount) * amplitude
+        const wave2 = Math.sin(progress * Math.PI * 2 * waveCount * 1.5) * amplitude * 0.3
         const y = blendDepth + wave1 + wave2
-        path.lineTo(x, Math.max(0, Math.min(size, y)))
+        path.lineTo(x, Math.max(blendDepth * 0.5, Math.min(blendDepth * 1.5, y)))
       }
       break
     }
@@ -379,13 +378,14 @@ function createOrganicBlendZone(
       path.moveTo(0, size)
       path.lineTo(size, size)
       
-      // Create clean wavy top boundary of blend zone
+      // Create tilable wavy top boundary - mirror pattern from north for seamless tiling
       for (let x = size; x >= 0; x -= 2) {
         const progress = x / size
-        const wave1 = Math.sin(progress * Math.PI * waveCount) * amplitude
-        const wave2 = Math.sin(progress * Math.PI * waveCount * 2.3) * amplitude * 0.2
+        // Use complementary sine waves for tilable patterns
+        const wave1 = Math.sin(progress * Math.PI * 2 * waveCount) * amplitude
+        const wave2 = Math.sin(progress * Math.PI * 2 * waveCount * 1.5) * amplitude * 0.3
         const y = size - blendDepth - wave1 - wave2
-        path.lineTo(x, Math.max(0, Math.min(size, y)))
+        path.lineTo(x, Math.max(size - blendDepth * 1.5, Math.min(size - blendDepth * 0.5, y)))
       }
       break
     }
@@ -395,13 +395,14 @@ function createOrganicBlendZone(
       path.moveTo(size, 0)
       path.lineTo(size, size)
       
-      // Create clean wavy left boundary of blend zone
+      // Create tilable wavy left boundary for seamless tiling
       for (let y = size; y >= 0; y -= 2) {
         const progress = y / size
-        const wave1 = Math.sin(progress * Math.PI * waveCount) * amplitude
-        const wave2 = Math.sin(progress * Math.PI * waveCount * 2.3) * amplitude * 0.2
+        // Use tilable sine waves that complete full cycles
+        const wave1 = Math.sin(progress * Math.PI * 2 * waveCount) * amplitude
+        const wave2 = Math.sin(progress * Math.PI * 2 * waveCount * 1.5) * amplitude * 0.3
         const x = size - blendDepth - wave1 - wave2
-        path.lineTo(Math.max(0, Math.min(size, x)), y)
+        path.lineTo(Math.max(size - blendDepth * 1.5, Math.min(size - blendDepth * 0.5, x)), y)
       }
       break
     }
@@ -411,13 +412,14 @@ function createOrganicBlendZone(
       path.moveTo(0, 0)
       path.lineTo(0, size)
       
-      // Create clean wavy right boundary of blend zone
+      // Create tilable wavy right boundary - complement to east pattern
       for (let y = size; y >= 0; y -= 2) {
         const progress = y / size
-        const wave1 = Math.sin(progress * Math.PI * waveCount) * amplitude
-        const wave2 = Math.sin(progress * Math.PI * waveCount * 2.3) * amplitude * 0.2
+        // Use complementary tilable sine waves
+        const wave1 = Math.sin(progress * Math.PI * 2 * waveCount) * amplitude
+        const wave2 = Math.sin(progress * Math.PI * 2 * waveCount * 1.5) * amplitude * 0.3
         const x = blendDepth + wave1 + wave2
-        path.lineTo(Math.max(0, Math.min(size, x)), y)
+        path.lineTo(Math.max(blendDepth * 0.5, Math.min(blendDepth * 1.5, x)), y)
       }
       break
     }
