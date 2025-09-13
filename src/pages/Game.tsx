@@ -15,7 +15,7 @@ import { ImageMapImporter } from '../components/ImageMapImporter'
 import { TileBrowser } from '../components/TileBrowser'
 import { useAllAssets } from '../store/assetStore'
 import { useTileStore } from '../store/tileStore'
-import { preloadAllTileImages, renderTile, renderTileWithBlending, renderSmartTile } from '../utils/tileRenderer'
+import { preloadAllTileImages, renderTile, renderTileWithBlending, renderSmartTile, invalidateTileCache } from '../utils/tileRenderer'
 import { applyParchmentBackground } from '../utils/canvasUtils'
 import { isDebugLoggingEnabled } from '../store/settingsStore'
 import type { Palette } from '../store'
@@ -730,6 +730,15 @@ export default function Game() {
 
     // Initial setup
     resize()
+    
+    // Set up periodic cache cleanup (every 2 minutes)
+    const cacheCleanupInterval = setInterval(() => {
+      const { cleanupAllCaches } = require('../utils/tileRenderer')
+      cleanupAllCaches()
+      if (isDebugLoggingEnabled()) {
+        console.log('🧹 Periodic cache cleanup performed')
+      }
+    }, 120000) // 2 minutes
 
     // Cleanup
     return () => {
@@ -744,6 +753,7 @@ export default function Game() {
       if (raf) cancelAnimationFrame(raf)
       if (zoomRAF) cancelAnimationFrame(zoomRAF)
       if (zoomDebounceTimer) clearTimeout(zoomDebounceTimer)
+      clearInterval(cacheCleanupInterval)
     }
   }, [isGridVisible, isSnapToGrid, layerSettings])
 

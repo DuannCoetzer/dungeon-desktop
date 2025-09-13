@@ -12,6 +12,7 @@ import {
   type MapData
 } from './protocol'
 import { saveMapToFile as tauriSaveMap, loadMapFromFile as tauriLoadMap } from './services/tauri'
+import { invalidateTileCache } from './utils/tileRenderer'
 import type { TileType, Layer, TileMap, AssetInstance, Palette } from './store'
 
 export interface Position {
@@ -127,11 +128,15 @@ export const useMapStore = create<MapState>((set, get) => {
     setTile: (x, y, type) => {
       const currentLayer = get().currentLayer
       protocolSetTile(currentLayer, x, y, type)
+      // Invalidate cache for this tile and its neighbors
+      invalidateTileCache(x, y)
     },
     
     eraseTile: (x, y) => {
       const currentLayer = get().currentLayer
       protocolEraseTile(currentLayer, x, y)
+      // Invalidate cache for this tile and its neighbors
+      invalidateTileCache(x, y)
     },
     
     // Layer management

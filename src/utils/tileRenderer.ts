@@ -37,14 +37,29 @@ export const TILE_IMAGE_MAP: Record<string, string> = {
 // Cache for loaded images
 const imageCache = new Map<string, HTMLImageElement>()
 
-// Simple render cache for performance during zoom operations
+// Comprehensive caching system for performance
 interface RenderCacheEntry {
   canvas: HTMLCanvasElement
   lastUsed: number
+  dataHash: string // Hash of tile data to detect changes
 }
-const renderCache = new Map<string, RenderCacheEntry>()
-const CACHE_LIFETIME = 30000 // 30 seconds
-const MAX_CACHE_SIZE = 100 // Limit cache size to prevent memory issues
+
+interface BackgroundCacheEntry {
+  canvas: HTMLCanvasElement
+  width: number
+  height: number
+  pattern: CanvasPattern | null
+}
+
+// Tile section cache for expensive blending operations
+const tileSectionCache = new Map<string, RenderCacheEntry>()
+const backgroundCache = new Map<string, BackgroundCacheEntry>()
+const blendedTileCache = new Map<string, RenderCacheEntry>() // Cache for individual blended tiles
+
+const CACHE_LIFETIME = 300000 // 5 minutes for better persistence
+const MAX_CACHE_SIZE = 200 // Increased cache size for better performance
+const TILE_SECTION_SIZE = 8 // Cache 8x8 tile sections
+const BACKGROUND_CACHE_KEY = 'parchment_bg'
 
 // Load and cache an image
 export function loadTileImage(palette: Palette): Promise<HTMLImageElement> {
@@ -91,45 +106,146 @@ export function getCachedTileImage(tileId: string): HTMLImageElement | null {
 }
 
 // Cache management utilities
-function cleanupRenderCache(): void {
+export function cleanupAllCaches(): void {
   const now = Date.now()
-  for (const [key, entry] of renderCache.entries()) {
+  
+  // Clean tile section cache
+  for (const [key, entry] of tileSectionCache.entries()) {
     if (now - entry.lastUsed > CACHE_LIFETIME) {
-      renderCache.delete(key)
+      tileSectionCache.delete(key)
     }
   }
   
-  // If cache is still too large, remove oldest entries
-  if (renderCache.size > MAX_CACHE_SIZE) {
-    const sortedEntries = Array.from(renderCache.entries())
+  // Clean blended tile cache
+  for (const [key, entry] of blendedTileCache.entries()) {
+    if (now - entry.lastUsed > CACHE_LIFETIME) {
+      blendedTileCache.delete(key)
+    }
+  }
+  
+  // If caches are still too large, remove oldest entries
+  cleanupCacheBySize(tileSectionCache)
+  cleanupCacheBySize(blendedTileCache)
+}
+
+function cleanupCacheBySize(cache: Map<string, RenderCacheEntry>): void {
+  if (cache.size > MAX_CACHE_SIZE) {
+    const sortedEntries = Array.from(cache.entries())
       .sort(([,a], [,b]) => a.lastUsed - b.lastUsed)
     
-    while (renderCache.size > MAX_CACHE_SIZE * 0.8) { // Keep 80% of max
+    while (cache.size > MAX_CACHE_SIZE * 0.8) { // Keep 80% of max
       const [key] = sortedEntries.shift()!
-      renderCache.delete(key)
+      cache.delete(key)
     }
   }
 }
 
-function getCachedRender(key: string, size: number): HTMLCanvasElement | null {
-  const entry = renderCache.get(key)
-  if (entry) {
+function getCachedRender(key: string, cache: Map<string, RenderCacheEntry>, expectedHash?: string): HTMLCanvasElement | null {
+  const entry = cache.get(key)
+  if (entry && (!expectedHash || entry.dataHash === expectedHash)) {
     entry.lastUsed = Date.now()
     return entry.canvas
   }
   return null
 }
 
-function setCachedRender(key: string, canvas: HTMLCanvasElement): void {
+function setCachedRender(key: string, canvas: HTMLCanvasElement, cache: Map<string, RenderCacheEntry>, dataHash: string = ''): void {
   // Clean cache if it's getting too big
-  if (renderCache.size >= MAX_CACHE_SIZE) {
-    cleanupRenderCache()
+  if (cache.size >= MAX_CACHE_SIZE) {
+    cleanupAllCaches()
   }
   
-  renderCache.set(key, {
-    canvas: canvas.cloneNode(true) as HTMLCanvasElement,
-    lastUsed: Date.now()
+  // Clone canvas to prevent external modifications
+  const clonedCanvas = document.createElement('canvas')
+  clonedCanvas.width = canvas.width
+  clonedCanvas.height = canvas.height
+  const clonedCtx = clonedCanvas.getContext('2d')!
+  clonedCtx.drawImage(canvas, 0, 0)
+  
+  cache.set(key, {
+    canvas: clonedCanvas,
+    lastUsed: Date.now(),
+    dataHash
   })
+}
+
+// Background caching functions
+export function getCachedBackground(width: number, height: number): HTMLCanvasElement | null {
+  const entry = backgroundCache.get(BACKGROUND_CACHE_KEY)
+  if (entry && entry.width === width && entry.height === height) {
+    return entry.canvas
+  }
+  return null
+}
+
+export function setCachedBackground(canvas: HTMLCanvasElement, width: number, height: number, pattern: CanvasPattern | null): void {
+  // Clone the background canvas
+  const clonedCanvas = document.createElement('canvas')
+  clonedCanvas.width = canvas.width
+  clonedCanvas.height = canvas.height
+  const clonedCtx = clonedCanvas.getContext('2d')!
+  clonedCtx.drawImage(canvas, 0, 0)
+  
+  backgroundCache.set(BACKGROUND_CACHE_KEY, {
+    canvas: clonedCanvas,
+    width,
+    height,
+    pattern
+  })
+}
+
+// Utility function to create a hash of tile data
+function createTileDataHash(tiles: Record<Layer, TileMap>, bounds: { left: number, top: number, right: number, bottom: number }): string {
+  const relevantTiles: string[] = []
+  
+  for (const layer of ['floor', 'walls', 'objects'] as const) {
+    for (const [key, value] of Object.entries(tiles[layer])) {
+      const [x, y] = key.split(',').map(Number)
+      if (x >= bounds.left && x <= bounds.right && y >= bounds.top && y <= bounds.bottom) {
+        relevantTiles.push(`${layer}:${key}:${value}`)
+      }
+    }
+  }
+  
+  return relevantTiles.sort().join('|')
+}
+
+// Cache individual blended tiles for reuse
+export function getCachedBlendedTile(tileId: string, tileX: number, tileY: number, size: number, dataHash: string): HTMLCanvasElement | null {
+  const key = `${tileId}_${tileX}_${tileY}_${size}`
+  return getCachedRender(key, blendedTileCache, dataHash)
+}
+
+export function setCachedBlendedTile(tileId: string, tileX: number, tileY: number, size: number, canvas: HTMLCanvasElement, dataHash: string): void {
+  const key = `${tileId}_${tileX}_${tileY}_${size}`
+  setCachedRender(key, canvas, blendedTileCache, dataHash)
+}
+
+// Cache invalidation when tiles change
+export function invalidateTileCache(tileX?: number, tileY?: number): void {
+  if (tileX !== undefined && tileY !== undefined) {
+    // Invalidate specific area
+    const affectedKeys = Array.from(blendedTileCache.keys()).filter(key => {
+      const [, x, y] = key.split('_')
+      const tx = parseInt(x)
+      const ty = parseInt(y)
+      // Invalidate the changed tile and its neighbors (for blending)
+      return Math.abs(tx - tileX) <= 1 && Math.abs(ty - tileY) <= 1
+    })
+    
+    affectedKeys.forEach(key => blendedTileCache.delete(key))
+    
+    if (isDebugLoggingEnabled()) {
+      console.log(`🗑️ Invalidated ${affectedKeys.length} cached tiles around (${tileX}, ${tileY})`)
+    }
+  } else {
+    // Invalidate all tile caches
+    blendedTileCache.clear()
+    tileSectionCache.clear()
+    if (isDebugLoggingEnabled()) {
+      console.log('🗑️ Cleared all tile caches')
+    }
+  }
 }
 
 // Preload all tile images (default and imported)
@@ -230,7 +346,23 @@ export function renderTileWithBlending(
     startTime = performance.now()
   }
   
-  // Analyze blending requirements first
+  // Create hash of local tile data for cache validation
+  const bounds = { 
+    left: tileX - 1, 
+    top: tileY - 1, 
+    right: tileX + 1, 
+    bottom: tileY + 1 
+  }
+  const dataHash = createTileDataHash(tiles, bounds)
+  
+  // Try to get cached blended tile first
+  const cachedTile = getCachedBlendedTile(tileId, tileX, tileY, size, dataHash)
+  if (cachedTile) {
+    ctx.drawImage(cachedTile, x, y)
+    return true
+  }
+  
+  // Analyze blending requirements
   const blendInfo = analyzeTileBlending(tileX, tileY, tiles, layer)
   
   // If no blending needed, use regular rendering
@@ -247,16 +379,18 @@ export function renderTileWithBlending(
     return renderTile(ctx, tileId, x, y, size) // Fallback
   }
   
-  // Save context state
-  ctx.save()
+  // Create an offscreen canvas for cached result
+  const offscreen = document.createElement('canvas')
+  offscreen.width = size
+  offscreen.height = size
+  const offCtx = offscreen.getContext('2d')!
   
-  // First, render the base tile normally
-  ctx.drawImage(baseImg, x, y, size, size)
+  // First, render the base tile
+  offCtx.drawImage(baseImg, 0, 0, size, size)
   
   // Apply each blend
   for (const blend of blendInfo.blends) {
     const neighborImg = getCachedTileImage(blend.neighborTile)
-    
     if (!neighborImg) {
       if (isDebugLoggingEnabled()) {
         console.warn('Neighbor tile image not found for:', blend.neighborTile)
@@ -264,43 +398,38 @@ export function renderTileWithBlending(
       continue
     }
     
-    // Use the existing blend mask from the blending service
     const blendMask = getCachedBlendMask(blend.direction as any, blend.blendStrength, size)
     
-    // Save state for this blend
-    ctx.save()
-    
-    // Create a temporary canvas for the masked neighbor tile
+    // Masked neighbor tile
     const tempCanvas = document.createElement('canvas')
     tempCanvas.width = size
     tempCanvas.height = size
     const tempCtx = tempCanvas.getContext('2d')!
-    
-    // Draw neighbor tile
     tempCtx.drawImage(neighborImg, 0, 0, size, size)
-    
-    // Apply organic mask using destination-in composite operation
     tempCtx.globalCompositeOperation = 'destination-in'
     tempCtx.drawImage(blendMask, 0, 0, size, size)
     
-    // Draw the masked result with high visibility for testing
-    ctx.globalAlpha = 0.8 // Make blending very visible
-    ctx.globalCompositeOperation = 'source-over'
-    ctx.drawImage(tempCanvas, x, y, size, size)
-    
-    ctx.restore()
+    // Draw onto offscreen result
+    offCtx.globalAlpha = 0.8
+    offCtx.globalCompositeOperation = 'source-over'
+    offCtx.drawImage(tempCanvas, 0, 0, size, size)
   }
+  
+  // Cache the result
+  setCachedBlendedTile(tileId, tileX, tileY, size, offscreen, dataHash)
+  
+  // Draw cached/offscreen result to main context
+  ctx.drawImage(offscreen, x, y)
   
   // Performance monitoring for blending operations
   if (isDebugLoggingEnabled() && startTime > 0) {
     const endTime = performance.now()
     const blendTime = endTime - startTime
-    if (blendTime > 5) { // Log if blending takes longer than 5ms
-      console.log(`🌨️ Slow blend: ${blendTime.toFixed(2)}ms for tile ${tileId} with ${blendInfo?.blends.length || 0} blends`)
+    if (blendTime > 5) {
+      console.log(`🌨️ Slow blend: ${blendTime.toFixed(2)}ms for tile ${tileId} with ${blendInfo?.blends.length || 0} blends (cached)`) 
     }
   }
   
-  ctx.restore()
   return true
 }
 
