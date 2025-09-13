@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useMapStore, useAssetInstances, useLayerSettings } from '../mapStore'
 import { useUIStore } from '../uiStore'
 import { getSavedMaps, exportMapData } from '../services/tauri'
@@ -11,6 +11,9 @@ export function FileOperationsPanel() {
   const [isLoading, setIsLoading] = useState(false)
   const [lastOperationStatus, setLastOperationStatus] = useState<string | null>(null)
   const [showDevInfo, setShowDevInfo] = useState(false)
+  const [showExportOptions, setShowExportOptions] = useState(false)
+  const [exportScale, setExportScale] = useState(4)
+  const exportOptionsRef = useRef<HTMLDivElement>(null)
   
   const saveMapToFile = useMapStore(state => state.saveMapToFile)
   const loadMapFromFile = useMapStore(state => state.loadMapFromFile)
@@ -47,6 +50,20 @@ export function FileOperationsPanel() {
   }
   
   const fileInputRef = useRef<HTMLInputElement>(null)
+  
+  // Close export options when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (exportOptionsRef.current && !exportOptionsRef.current.contains(event.target as Node)) {
+        setShowExportOptions(false)
+      }
+    }
+    
+    if (showExportOptions) {
+      document.addEventListener('mousedown', handleClickOutside)
+      return () => document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [showExportOptions])
   
   const handleLoad = async () => {
     if (isLoading) return
@@ -149,7 +166,7 @@ export function FileOperationsPanel() {
     }
   }
   
-  const handleExportPNG = async () => {
+  const handleExportPNG = async (customScale?: number) => {
     if (isLoading) return
     
     setIsLoading(true)
@@ -160,9 +177,9 @@ export function FileOperationsPanel() {
       const exportCanvas = document.createElement('canvas')
       const exportCtx = exportCanvas.getContext('2d')!
       
-      // Set canvas size (you might want to make this configurable)
+      // Set canvas size with configurable resolution
       const TILE_SIZE = 32
-      const EXPORT_SCALE = 2 // Higher resolution for export
+      const EXPORT_SCALE = customScale || exportScale
       
       // Calculate map bounds more accurately
       const tiles = mapData.tiles
@@ -219,6 +236,10 @@ export function FileOperationsPanel() {
       
       exportCanvas.width = mapWidth
       exportCanvas.height = mapHeight
+      
+      // Configure canvas for high-quality rendering
+      exportCtx.imageSmoothingEnabled = false // Pixel-perfect for tiles
+      exportCtx.imageSmoothingQuality = 'high'
       
       // Apply parchment background matching the main view
       applyParchmentBackground(exportCtx, mapWidth, mapHeight)
@@ -323,12 +344,17 @@ export function FileOperationsPanel() {
             const width = (asset.gridWidth || 1) * TILE_SIZE * EXPORT_SCALE
             const height = (asset.gridHeight || 1) * TILE_SIZE * EXPORT_SCALE
             
-            // Save context for rotation
+            // Save context for rotation and enable smoothing for assets (better quality)
             exportCtx.save()
+            exportCtx.imageSmoothingEnabled = true
+            exportCtx.imageSmoothingQuality = 'high'
             exportCtx.translate(sx + width / 2, sy + height / 2)
             exportCtx.rotate((instance.rotation * Math.PI) / 180)
             exportCtx.drawImage(img, -width / 2, -height / 2, width, height)
             exportCtx.restore()
+            
+            // Reset to pixel-perfect for tiles
+            exportCtx.imageSmoothingEnabled = false
           } catch (error) {
             console.warn(`Failed to render asset ${instance.id}:`, error)
           }
@@ -338,23 +364,23 @@ export function FileOperationsPanel() {
         exportCtx.globalAlpha = originalGlobalAlpha
       }
       
-      // Convert to blob and download
+      // Convert to blob with high quality settings and download
       exportCanvas.toBlob((blob) => {
         if (blob) {
           const url = URL.createObjectURL(blob)
           const link = document.createElement('a')
           link.href = url
-          link.download = `dungeon-map-${new Date().toISOString().split('T')[0]}.png`
+          link.download = `dungeon-map-${new Date().toISOString().split('T')[0]}-${EXPORT_SCALE}x.png`
           document.body.appendChild(link)
           link.click()
           document.body.removeChild(link)
           URL.revokeObjectURL(url)
           
-          setLastOperationStatus('Map exported as PNG!')
+          setLastOperationStatus(`Map exported as PNG (${EXPORT_SCALE}x resolution)!`)
         } else {
           setLastOperationStatus('Export failed.')
         }
-      }, 'image/png')
+      }, 'image/png', 1.0)
       
     } catch (error) {
       console.error('PNG export failed:', error)
@@ -486,14 +512,111 @@ export function FileOperationsPanel() {
         >
           📄 New Map {isLoading ? '...' : ''}
         </button>
-        <button 
-          className="tool-button" 
-          onClick={handleExportPNG}
-          disabled={isLoading}
-          title="Export current map as high-resolution PNG image"
-        >
-          🖼️ Export PNG {isLoading ? '...' : ''}
-        </button>
+        <div style={{ position: 'relative' }} ref={exportOptionsRef}>
+          <button 
+            className="tool-button" 
+            onClick={() => setShowExportOptions(!showExportOptions)}
+            disabled={isLoading}
+            title="Export current map as PNG image with quality options"
+          >
+            🖼️ Export PNG {showExportOptions ? '▼' : '▶'} {isLoading ? '...' : ''}
+          </button>
+          
+          {showExportOptions && (
+            <div style={{
+              position: 'absolute',
+              top: '100%',
+              left: 0,
+              right: 0,
+              background: '#1f2430',
+              border: '1px solid #2a3441',
+              borderRadius: '4px',
+              padding: '8px',
+              zIndex: 1000,
+              marginTop: '2px'
+            }}>
+              <div style={{
+                fontSize: '11px',
+                color: '#e6e6e6',
+                marginBottom: '6px',
+                fontWeight: '500'
+              }}>
+                Export Quality:
+              </div>
+              
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <button
+                  onClick={() => {
+                    handleExportPNG(2)
+                    setShowExportOptions(false)
+                  }}
+                  disabled={isLoading}
+                  style={{
+                    padding: '4px 8px',
+                    fontSize: '10px',
+                    backgroundColor: '#2a3441',
+                    border: '1px solid #3a4451',
+                    borderRadius: '3px',
+                    color: '#e6e6e6',
+                    cursor: 'pointer'
+                  }}
+                  title="2x resolution - Good for web sharing (~500KB typical)"
+                >
+                  📱 Standard (2x)
+                </button>
+                
+                <button
+                  onClick={() => {
+                    handleExportPNG(4)
+                    setShowExportOptions(false)
+                  }}
+                  disabled={isLoading}
+                  style={{
+                    padding: '4px 8px',
+                    fontSize: '10px',
+                    backgroundColor: '#2a3441',
+                    border: '1px solid #3a4451',
+                    borderRadius: '3px',
+                    color: '#e6e6e6',
+                    cursor: 'pointer'
+                  }}
+                  title="4x resolution - High quality for printing (~2MB typical)"
+                >
+                  🖨️ High Quality (4x)
+                </button>
+                
+                <button
+                  onClick={() => {
+                    handleExportPNG(8)
+                    setShowExportOptions(false)
+                  }}
+                  disabled={isLoading}
+                  style={{
+                    padding: '4px 8px',
+                    fontSize: '10px',
+                    backgroundColor: '#2a3441',
+                    border: '1px solid #3a4451',
+                    borderRadius: '3px',
+                    color: '#e6e6e6',
+                    cursor: 'pointer'
+                  }}
+                  title="8x resolution - Ultra high quality (~8MB typical)"
+                >
+                  💎 Ultra HD (8x)
+                </button>
+              </div>
+              
+              <div style={{
+                fontSize: '9px',
+                color: '#888',
+                marginTop: '6px',
+                lineHeight: '1.2'
+              }}>
+                💡 Higher quality = larger file size
+              </div>
+            </div>
+          )}
+        </div>
         <button 
           className="tool-button" 
           onClick={handleExportForAction}
