@@ -4,6 +4,7 @@ import { useTileStore } from '../store/tileStore'
 import { isImportedAsset, clearImportedAssets } from '../services/assetPersistence'
 import type { Asset } from '../store'
 import { TileBrowser } from '../components/TileBrowser'
+import { BlendPriorityPanel } from '../components/BlendPriorityPanel'
 import './AssetDesigner.css'
 
 interface AssetCategory {
@@ -373,10 +374,22 @@ export default function AssetDesigner() {
           </>
         ) : (
           /* Tiles Tab Content */
-          <div className="tiles-content" style={{ padding: '20px', width: '100%' }}>
-            <div style={{ maxWidth: '400px', margin: '0 auto' }}>
-              <h2 style={{ marginBottom: '20px', color: '#e6e6e6' }}>Tile Library</h2>
+          <div className="tiles-content" style={{ 
+            padding: '20px', 
+            width: '100%', 
+            display: 'grid', 
+            gridTemplateColumns: '1fr 1fr', 
+            gap: '24px', 
+            maxWidth: '1200px', 
+            margin: '0 auto' 
+          }}>
+            <div>
+              <h2 style={{ marginBottom: '16px', color: '#e6e6e6', fontSize: '18px' }}>Tile Library</h2>
               <TileBrowser />
+            </div>
+            <div>
+              <h2 style={{ marginBottom: '16px', color: '#e6e6e6', fontSize: '18px' }}>Blend Priority Settings</h2>
+              <BlendPriorityPanel />
             </div>
           </div>
         )}

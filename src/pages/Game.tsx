@@ -882,6 +882,49 @@ export default function Game() {
           </button>
         </div>
         
+        {/* Update Blending */}
+        <div className="toolbar-section">
+          <button
+            onClick={() => {
+              // Invalidate tile cache to force redraw with new priorities
+              const { invalidateTileCache } = require('../utils/tileRenderer')
+              invalidateTileCache() // Clear all cached blends
+              
+              // Force a redraw
+              const canvas = canvasRef.current
+              if (canvas) {
+                const event = new Event('resize')
+                window.dispatchEvent(event)
+              }
+              
+              if (isDebugLoggingEnabled()) {
+                console.log('🔄 Blend priorities updated - cache cleared and redrawing')
+              }
+            }}
+            style={{
+              padding: '8px 16px',
+              background: '#059669',
+              border: '1px solid #047857',
+              borderRadius: '4px',
+              color: '#fff',
+              fontSize: '12px',
+              cursor: 'pointer',
+              width: '100%',
+              fontWeight: '500',
+              transition: 'background-color 0.2s'
+            }}
+            onMouseOver={(e) => {
+              e.currentTarget.style.backgroundColor = '#047857'
+            }}
+            onMouseOut={(e) => {
+              e.currentTarget.style.backgroundColor = '#059669'
+            }}
+            title="Update tile blending with new priority settings"
+          >
+            🔄 Update Blending
+          </button>
+        </div>
+        
         {/* Tools */}
         <div className="toolbar-section">
           <h3 className="toolbar-title">Tools</h3>

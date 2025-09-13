@@ -140,12 +140,16 @@ export function canTilesBlend(tile1: string, tile2: string): boolean {
  */
 export function getTileBlendPriority(tile: string): number {
   // Try to get priority from tile store first
-  const { useTileStore } = require('../store/tileStore')
-  const tileStore = useTileStore.getState()
-  const tileData = tileStore.getTileById(tile)
-  
-  if (tileData && tileData.blendPriority !== undefined) {
-    return tileData.blendPriority
+  try {
+    const tileStore = useTileStore.getState()
+    const tileData = tileStore.getTileById(tile)
+    
+    if (tileData && tileData.blendPriority !== undefined) {
+      return tileData.blendPriority
+    }
+  } catch (error) {
+    // Fallback to hardcoded values if tile store is not available
+    console.warn('Could not access tile store for blend priority, using fallback values')
   }
   
   // Fallback to hardcoded priorities for legacy compatibility
