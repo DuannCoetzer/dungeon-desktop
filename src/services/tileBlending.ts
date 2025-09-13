@@ -139,7 +139,16 @@ export function canTilesBlend(tile1: string, tile2: string): boolean {
  * Get the blending priority of a tile (higher = dominates blend)
  */
 export function getTileBlendPriority(tile: string): number {
-  // Check default priorities first
+  // Try to get priority from tile store first
+  const { useTileStore } = require('../store/tileStore')
+  const tileStore = useTileStore.getState()
+  const tileData = tileStore.getTileById(tile)
+  
+  if (tileData && tileData.blendPriority !== undefined) {
+    return tileData.blendPriority
+  }
+  
+  // Fallback to hardcoded priorities for legacy compatibility
   if (TILE_BLEND_PRIORITY[tile] !== undefined) {
     return TILE_BLEND_PRIORITY[tile]
   }
@@ -203,33 +212,32 @@ export function analyzeTileBlending(
       const basePriority = getTileBlendPriority(baseTile)
       const neighborPriority = getTileBlendPriority(neighborTile)
       
-      // CONSISTENT BLEND DIRECTION: Always blend outward from base tile into neighbor
-      // This ensures all tiles blend in the same visual direction for consistency
-      
-      let shouldBlend = false
-      let blendStrength = 1.0
+      // Natural blend direction: Higher priority tiles blend into lower priority ones
+      // This creates the expected visual hierarchy (e.g., cobblestone blends into grass)
       
       if (neighborPriority > basePriority) {
-        // Higher priority neighbor: blend base tile outward with stronger effect
-        shouldBlend = true
-        blendStrength = 1.8 // Stronger blend for priority difference
-      } else if (neighborPriority === basePriority) {
-        // Same priority: use consistent direction based on tile names to avoid double-blending
-        shouldBlend = baseTile.localeCompare(neighborTile) < 0
-        blendStrength = 1.2 // Moderate blend for same priority
-      } else {
-        // Lower priority neighbor: subtle outward blend
-        shouldBlend = true  
-        blendStrength = 0.8 // Subtle blend when base has higher priority
-      }
-      
-      if (shouldBlend) {
+        // Neighbor has higher priority - it blends into this base tile
+        const blendStrength = 1.5
+        
         blends.push({
           direction: dir,
           neighborTile,
           blendStrength
         })
+      } else if (neighborPriority === basePriority) {
+        // Same priority tiles: use consistent direction to avoid double-blending
+        const shouldBlend = baseTile.localeCompare(neighborTile) < 0
+        if (shouldBlend) {
+          const blendStrength = 1.2
+          
+          blends.push({
+            direction: dir,
+            neighborTile,
+            blendStrength
+          })
+        }
       }
+      // Lower priority neighbors don't blend into higher priority base tiles
     }
   }
   

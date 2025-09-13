@@ -29,6 +29,7 @@ export interface Tile {
   thumb?: string  // Optional thumbnail
   isDefault: boolean  // Whether this is a built-in tile
   createdAt?: string  // When it was added/imported
+  blendPriority?: number  // Blending priority (higher = dominates blend)
 }
 
 export type TileCategory = 'floors' | 'walls' | 'roofs' | 'pathing' | 'special'
@@ -101,24 +102,24 @@ const DEFAULT_CATEGORIES = [
   { id: 'special' as TileCategory, name: 'Special', description: 'Special purpose tiles and tools', color: '#ef4444' }
 ]
 
-// Default tiles matching the current system
+// Default tiles matching the current system with blend priorities
 const DEFAULT_TILES: Omit<Tile, 'id'>[] = [
-  // Floor tiles
-  { name: 'Grass', category: 'floors', src: TileGrass, isDefault: true },
-  { name: 'Rough Stone Floor', category: 'floors', src: TileFloorStoneRough, isDefault: true },
-  { name: 'Smooth Stone Floor', category: 'floors', src: TileFloorStoneSmooth, isDefault: true },
-  { name: 'Wood Planks', category: 'floors', src: TileFloorWoodPlanks, isDefault: true },
-  { name: 'Cobblestone', category: 'floors', src: TileFloorCobblestone, isDefault: true },
+  // Floor tiles (lower priorities blend into higher priorities)
+  { name: 'Grass', category: 'floors', src: TileGrass, isDefault: true, blendPriority: 1 },
+  { name: 'Rough Stone Floor', category: 'floors', src: TileFloorStoneRough, isDefault: true, blendPriority: 2 },
+  { name: 'Smooth Stone Floor', category: 'floors', src: TileFloorStoneSmooth, isDefault: true, blendPriority: 3 },
+  { name: 'Wood Planks', category: 'floors', src: TileFloorWoodPlanks, isDefault: true, blendPriority: 4 },
+  { name: 'Cobblestone', category: 'floors', src: TileFloorCobblestone, isDefault: true, blendPriority: 5 },
   
-  // Wall tiles
-  { name: 'Stone Wall', category: 'walls', src: TileWall, isDefault: true },
-  { name: 'Brick Wall', category: 'walls', src: TileWallBrick, isDefault: true },
-  { name: 'Stone Wall Alt', category: 'walls', src: TileWallStone, isDefault: true },
-  { name: 'Wood Wall', category: 'walls', src: TileWallWood, isDefault: true },
+  // Wall tiles (high priority - don't usually blend)
+  { name: 'Stone Wall', category: 'walls', src: TileWall, isDefault: true, blendPriority: 10 },
+  { name: 'Brick Wall', category: 'walls', src: TileWallBrick, isDefault: true, blendPriority: 10 },
+  { name: 'Stone Wall Alt', category: 'walls', src: TileWallStone, isDefault: true, blendPriority: 10 },
+  { name: 'Wood Wall', category: 'walls', src: TileWallWood, isDefault: true, blendPriority: 10 },
   
   // Special tiles
-  { name: 'Eraser', category: 'special', src: IconErase, isDefault: true },
-  { name: 'Fog of War', category: 'special', src: createFogTileDataURL(), isDefault: true } // Dark fog tile for painting fog of war
+  { name: 'Eraser', category: 'special', src: IconErase, isDefault: true, blendPriority: 0 },
+  { name: 'Fog of War', category: 'special', src: createFogTileDataURL(), isDefault: true, blendPriority: 1 } // Dark fog tile for painting fog of war
 ]
 
 export const useTileStore = create<TileState>((set, get) => ({

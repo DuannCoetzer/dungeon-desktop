@@ -197,6 +197,87 @@ export function TileBrowser({ onTileSelect, className = '' }: TileBrowserProps) 
         )}
       </div>
       
+      {/* Blend Priority Control */}
+      {selectedTileId && (() => {
+        const selectedTile = allTiles.find(t => t.id === selectedTileId)
+        if (!selectedTile || selectedTile.category !== 'floors') return null
+        
+        return (
+          <div style={{
+            marginTop: '16px',
+            padding: '12px',
+            background: '#1f2430',
+            border: '1px solid #2a3441',
+            borderRadius: '6px'
+          }}>
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              marginBottom: '8px'
+            }}>
+              <span style={{
+                fontSize: '12px',
+                fontWeight: '500',
+                color: '#e6e6e6'
+              }}>
+                Blend Priority
+              </span>
+              <div style={{
+                fontSize: '10px',
+                color: '#a8a8a8',
+                textAlign: 'right'
+              }}>
+                Higher values blend into lower ones
+              </div>
+            </div>
+            
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <input
+                type="range"
+                min="0"
+                max="10"
+                step="1"
+                value={selectedTile.blendPriority || 1}
+                onChange={async (e) => {
+                  const newPriority = parseInt(e.target.value)
+                  await tileStore.updateTile(selectedTile.id, {
+                    blendPriority: newPriority
+                  })
+                }}
+                style={{
+                  flex: 1,
+                  height: '4px',
+                  background: '#2a3441',
+                  borderRadius: '2px',
+                  outline: 'none',
+                  cursor: 'pointer'
+                }}
+              />
+              <div style={{
+                minWidth: '20px',
+                fontSize: '12px',
+                fontWeight: '500',
+                color: '#7c8cff',
+                textAlign: 'center'
+              }}>
+                {selectedTile.blendPriority || 1}
+              </div>
+            </div>
+            
+            <div style={{
+              fontSize: '10px',
+              color: '#888',
+              marginTop: '6px',
+              lineHeight: '1.3'
+            }}>
+              Examples: Grass (1) → Stone (3) → Cobblestone (5). 
+              Walls typically use 10.
+            </div>
+          </div>
+        )
+      })()}
+      
       {/* Import Dialog */}
       {showImportDialog && (
         <TileImportDialog
