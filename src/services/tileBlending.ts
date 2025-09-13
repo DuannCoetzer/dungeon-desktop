@@ -203,31 +203,32 @@ export function analyzeTileBlending(
       const basePriority = getTileBlendPriority(baseTile)
       const neighborPriority = getTileBlendPriority(neighborTile)
       
-      // Blend if neighbor has higher priority, or same priority with different tiles
+      // CONSISTENT BLEND DIRECTION: Always blend outward from base tile into neighbor
+      // This ensures all tiles blend in the same visual direction for consistency
+      
+      let shouldBlend = false
+      let blendStrength = 1.0
+      
       if (neighborPriority > basePriority) {
-        // Calculate blend strength based on priority difference
-        const priorityDiff = neighborPriority - basePriority
-        const maxPriorityDiff = 10 // Reasonable max difference
-        const blendStrength = 1.5
-        
+        // Higher priority neighbor: blend base tile outward with stronger effect
+        shouldBlend = true
+        blendStrength = 1.8 // Stronger blend for priority difference
+      } else if (neighborPriority === basePriority) {
+        // Same priority: use consistent direction based on tile names to avoid double-blending
+        shouldBlend = baseTile.localeCompare(neighborTile) < 0
+        blendStrength = 1.2 // Moderate blend for same priority
+      } else {
+        // Lower priority neighbor: subtle outward blend
+        shouldBlend = true  
+        blendStrength = 0.8 // Subtle blend when base has higher priority
+      }
+      
+      if (shouldBlend) {
         blends.push({
           direction: dir,
           neighborTile,
           blendStrength
         })
-      } else if (neighborPriority === basePriority) {
-        // For same priority tiles, use a moderate blend strength
-        // and only blend in one direction to avoid double-blending
-        const shouldBlend = baseTile.localeCompare(neighborTile) < 0 // Consistent direction
-        if (shouldBlend) {
-          const blendStrength = 1.5 // Enhanced blend for same-priority tiles
-          
-          blends.push({
-            direction: dir,
-            neighborTile,
-            blendStrength
-          })
-        }
       }
     }
   }
