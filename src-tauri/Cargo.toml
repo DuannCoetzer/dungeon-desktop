@@ -1,6 +1,6 @@
 [package]
 name = "dungeon-desktop"
-version = "1.0.0"
+version = "1.0.2"
 description = "Professional D&D map creation and management tool"
 authors = ["Studio Cosmic North"]
 license = "Proprietary"
