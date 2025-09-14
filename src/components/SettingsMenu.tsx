@@ -12,10 +12,12 @@ const SettingsMenu: React.FC = () => {
     enableParchmentCreases,
     showAdvancedSettings,
     enableDebugLogging,
+    enableMapAssets,
     setWarpDistortion,
     setParchmentCreases,
     setShowAdvancedSettings,
     setDebugLogging,
+    setMapAssets,
     resetToDefaults,
   } = useSettingsStore()
 
@@ -153,6 +155,21 @@ const SettingsMenu: React.FC = () => {
             {showAdvancedSettings && (
               <div className="settings-section">
                 <h4>🔧 Developer Options</h4>
+                
+                <div className="setting-item">
+                  <label className="setting-label">
+                    <input
+                      type="checkbox"
+                      checked={enableMapAssets}
+                      onChange={(e) => setMapAssets(e.target.checked)}
+                      className="setting-checkbox"
+                    />
+                    <span className="setting-text">
+                      🗺️ Map Background Assets
+                      <small>Enable importing large images as bounded canvas backgrounds</small>
+                    </span>
+                  </label>
+                </div>
                 
                 <div className="setting-item">
                   <label className="setting-label">

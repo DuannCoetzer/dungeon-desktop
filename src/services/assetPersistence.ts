@@ -60,7 +60,13 @@ export async function loadImportedAssets(): Promise<Asset[]> {
     
     const invoke = await getTauriInvoke()
     const assetsJson = await invoke<string>('read_imported_assets')
-    return JSON.parse(assetsJson)
+    const assets = JSON.parse(assetsJson) as Asset[]
+    
+    // Ensure backward compatibility: assets without 'type' default to 'regular'
+    return assets.map(asset => ({
+      ...asset,
+      type: asset.type || 'regular'
+    }))
   } catch (error) {
     // File doesn't exist yet or other errors, return empty array
     console.log('No imported assets file found, starting with empty list')
@@ -154,6 +160,6 @@ export async function clearImportedAssets(): Promise<boolean> {
  * Check if an asset is user-imported (vs from default manifest)
  */
 export function isImportedAsset(assetId: string): boolean {
-  // Imported assets have IDs that start with 'imported_'
-  return assetId.startsWith('imported_')
+  // Imported assets have IDs that start with 'imported_' or legacy 'map_' format
+  return assetId.startsWith('imported_') || assetId.startsWith('map_')
 }

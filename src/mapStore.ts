@@ -41,6 +41,21 @@ interface MapState {
   // Asset placement state
   selectedAssetForPlacement: string | null // Asset ID selected for placement
   
+  // Map asset state - for canvas background override
+  mapAsset: {
+    assetId: string | null // ID of the map asset used as canvas background
+    isActive: boolean // Whether bounded canvas mode is active
+    bounds: { // Map boundaries in grid coordinates
+      minX: number
+      minY: number
+      maxX: number
+      maxY: number
+    } | null
+    // Alignment offset in grid units for fine-tuning map position
+    offsetX: number
+    offsetY: number
+  }
+  
   // Current editing context
   currentLayer: Layer
   selected: Palette
@@ -64,6 +79,13 @@ interface MapState {
   deselectAssetInstance: (id: string) => void
   clearAssetSelection: () => void
   setSelectedAssetForPlacement: (assetId: string | null) => void
+  
+  // Map asset management
+  setMapAsset: (assetId: string, bounds: { minX: number; minY: number; maxX: number; maxY: number }) => void
+  clearMapAsset: () => void
+  toggleCanvasMode: () => void // Toggle between infinite and bounded mode
+  adjustMapAlignment: (offsetX: number, offsetY: number) => void // Adjust map alignment offset
+  resetMapAlignment: () => void // Reset alignment to default
   
   // File operations
   saveMapToFile: () => Promise<boolean>
@@ -90,6 +112,16 @@ export const useMapStore = create<MapState>((set, get) => {
     },
     selectedAssetInstances: [],
     selectedAssetForPlacement: null,
+    
+    // Initialize map asset state
+    mapAsset: {
+      assetId: null,
+      isActive: false,
+      bounds: null,
+      offsetX: 0,
+      offsetY: 0
+    },
+    
     currentLayer: 'floor',
     selected: 'grass',
     
@@ -126,14 +158,38 @@ export const useMapStore = create<MapState>((set, get) => {
     },
     
     setTile: (x, y, type) => {
-      const currentLayer = get().currentLayer
+      const state = get()
+      const { mapAsset } = state
+      
+      // Check bounds in bounded canvas mode
+      if (mapAsset.isActive && mapAsset.bounds) {
+        const { bounds } = mapAsset
+        if (x < bounds.minX || x >= bounds.maxX || y < bounds.minY || y >= bounds.maxY) {
+          // Tile is outside map bounds in bounded mode, ignore
+          return
+        }
+      }
+      
+      const currentLayer = state.currentLayer
       protocolSetTile(currentLayer, x, y, type)
       // Invalidate cache for this tile and its neighbors
       invalidateTileCache(x, y)
     },
     
     eraseTile: (x, y) => {
-      const currentLayer = get().currentLayer
+      const state = get()
+      const { mapAsset } = state
+      
+      // Check bounds in bounded canvas mode
+      if (mapAsset.isActive && mapAsset.bounds) {
+        const { bounds } = mapAsset
+        if (x < bounds.minX || x >= bounds.maxX || y < bounds.minY || y >= bounds.maxY) {
+          // Tile is outside map bounds in bounded mode, ignore
+          return
+        }
+      }
+      
+      const currentLayer = state.currentLayer
       protocolEraseTile(currentLayer, x, y)
       // Invalidate cache for this tile and its neighbors
       invalidateTileCache(x, y)
@@ -191,6 +247,51 @@ export const useMapStore = create<MapState>((set, get) => {
     
     clearAssetSelection: () => set({ selectedAssetInstances: [] }),
     
+    // Map asset management actions
+    setMapAsset: (assetId, bounds) => set((s) => ({
+      mapAsset: {
+        assetId,
+        isActive: true,
+        bounds,
+        offsetX: s.mapAsset.offsetX, // Preserve existing alignment
+        offsetY: s.mapAsset.offsetY
+      }
+    })),
+    
+    clearMapAsset: () => set((s) => ({
+      mapAsset: {
+        assetId: null,
+        isActive: false,
+        bounds: null,
+        offsetX: 0,
+        offsetY: 0
+      }
+    })),
+    
+    toggleCanvasMode: () => set((s) => ({
+      mapAsset: {
+        ...s.mapAsset,
+        isActive: !s.mapAsset.isActive
+      }
+    })),
+    
+    // Map alignment controls
+    adjustMapAlignment: (offsetX, offsetY) => set((s) => ({
+      mapAsset: {
+        ...s.mapAsset,
+        offsetX: s.mapAsset.offsetX + offsetX,
+        offsetY: s.mapAsset.offsetY + offsetY
+      }
+    })),
+    
+    resetMapAlignment: () => set((s) => ({
+      mapAsset: {
+        ...s.mapAsset,
+        offsetX: 0,
+        offsetY: 0
+      }
+    })),
+    
     // File operations - use Tauri service functions
     saveMapToFile: async () => {
       try {
@@ -227,6 +328,13 @@ export const useMapStore = create<MapState>((set, get) => {
         },
         selectedAssetInstances: [],
         selectedAssetForPlacement: null,
+        mapAsset: {
+          assetId: null,
+          isActive: false,
+          bounds: null,
+          offsetX: 0,
+          offsetY: 0
+        },
         currentLayer: 'floor',
         selected: 'grass',
       })
@@ -250,3 +358,5 @@ export const useSelectedPalette = () => useMapStore(state => state.selected)
 export const usePlayerPosition = () => useMapStore(state => state.player)
 export const useSelectedAssetInstances = () => useMapStore(state => state.selectedAssetInstances)
 export const useSelectedAssetForPlacement = () => useMapStore(state => state.selectedAssetForPlacement)
+export const useMapAsset = () => useMapStore(state => state.mapAsset)
+export const useCanvasMode = () => useMapStore(state => state.mapAsset.isActive ? 'bounded' : 'infinite')

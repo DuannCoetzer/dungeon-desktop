@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useDrop } from 'react-dnd'
 import { IconSelect, IconDraw, IconErase, TileGrass, TileWall } from '../assets'
-import { useMapStore, useCurrentLayer, useLayerSettings, useSelectedPalette, useAssetInstances } from '../mapStore'
+import { useMapStore, useCurrentLayer, useLayerSettings, useSelectedPalette, useAssetInstances, useMapAsset, useCanvasMode } from '../mapStore'
 import { useUIStore, useSelectedTool } from '../uiStore'
 import { type Asset, type AssetInstance } from '../store'
 import { toolManager } from '../tools'
@@ -13,11 +13,12 @@ import { FileOperationsPanel } from '../components/FileOperationsPanel'
 import { ToolSettingsPanel } from '../components/ToolSettingsPanel'
 import { ImageMapImporter } from '../components/ImageMapImporter'
 import { TileBrowser } from '../components/TileBrowser'
+import { MapAssetPanel } from '../components/MapAssetPanel'
 import { useAllAssets } from '../store/assetStore'
 import { useTileStore } from '../store/tileStore'
 import { preloadAllTileImages, renderTile, renderTileWithBlending, renderSmartTile, invalidateTileCache } from '../utils/tileRenderer'
 import { applyParchmentBackground } from '../utils/canvasUtils'
-import { isDebugLoggingEnabled } from '../store/settingsStore'
+import { isDebugLoggingEnabled, useMapAssets } from '../store/settingsStore'
 import type { Palette } from '../store'
 import { About } from '../components/About'
 
@@ -58,6 +59,11 @@ export default function Game() {
 
   // Assets from persistent store
   const assets = useAllAssets()
+  
+  // Map asset state for bounded canvas mode
+  const mapAsset = useMapAsset()
+  const canvasMode = useCanvasMode()
+  const isMapAssetsEnabled = useMapAssets()
 
   // Camera transform state - using refs to avoid re-render loops
   const cameraTransformRef = useRef({ scale: 1, offsetX: 0, offsetY: 0 })
@@ -368,6 +374,40 @@ export default function Game() {
       const wy = (py - offsetY) / (TILE * scale)
       return { x: Math.floor(wx), y: Math.floor(wy) }
     }
+    
+    // Helper function to constrain camera within bounded map limits
+    const constrainCamera = (newOffsetX: number, newOffsetY: number, newScale: number) => {
+      const currentMapAsset = useMapStore.getState().mapAsset
+      
+      // If not in bounded mode, allow unlimited movement
+      if (!currentMapAsset.isActive || !currentMapAsset.bounds) {
+        return { offsetX: newOffsetX, offsetY: newOffsetY }
+      }
+      
+      const { bounds } = currentMapAsset
+      const rect = stage.getBoundingClientRect()
+      
+      // Get the actual map asset data to use real image dimensions
+      const mapAssetData = assets.find(asset => asset.id === currentMapAsset.assetId)
+      if (!mapAssetData) return { offsetX: newOffsetX, offsetY: newOffsetY }
+      
+      // Calculate map dimensions in pixels using actual image dimensions
+      const mapWidthPx = mapAssetData.width * newScale
+      const mapHeightPx = mapAssetData.height * newScale
+      
+      // Calculate boundaries for camera offset
+      // Camera can't pan beyond showing empty space
+      const minOffsetX = Math.min(rect.width - mapWidthPx, bounds.minX * TILE * newScale)
+      const maxOffsetX = Math.max(0, -bounds.minX * TILE * newScale)
+      const minOffsetY = Math.min(rect.height - mapHeightPx, bounds.minY * TILE * newScale)
+      const maxOffsetY = Math.max(0, -bounds.minY * TILE * newScale)
+      
+      // Constrain the offset within bounds
+      const constrainedX = Math.max(minOffsetX, Math.min(maxOffsetX, newOffsetX))
+      const constrainedY = Math.max(minOffsetY, Math.min(maxOffsetY, newOffsetY))
+      
+      return { offsetX: constrainedX, offsetY: constrainedY }
+    }
 
     const drawGrid = () => {
       try {
@@ -386,6 +426,93 @@ export default function Game() {
         applyParchmentBackground(ctx, rect.width, rect.height)
         if (isDebugLoggingEnabled()) {
           console.log('✅ Parchment background applied')
+        }
+        
+        // Render map asset background if in bounded mode
+        const currentMapAsset = useMapStore.getState().mapAsset
+        if (currentMapAsset.isActive && currentMapAsset.assetId && currentMapAsset.bounds) {
+          try {
+            // Get the map asset from the component's assets state (avoid hooks in render function)
+            const mapAssetData = assets.find(asset => asset.id === currentMapAsset.assetId)
+            if (mapAssetData) {
+              // Use a cached image approach to avoid blob URL issues
+              let mapImg = new Image()
+              
+              // Try to reuse existing image if available
+              const existingImg = document.querySelector(`img[data-asset-id="${mapAssetData.id}"]`) as HTMLImageElement
+              if (existingImg && existingImg.complete && existingImg.naturalWidth > 0) {
+                // Use existing loaded image
+                mapImg = existingImg
+                
+                ctx.save()
+                
+                // Calculate map position and size in screen coordinates with alignment offset
+                const { bounds, offsetX, offsetY } = currentMapAsset
+                const { sx: startX, sy: startY } = worldToScreen(bounds.minX + offsetX, bounds.minY + offsetY)
+                
+                // Use the actual image dimensions scaled to match tile size
+                const mapWidthPx = mapAssetData.width * scale
+                const mapHeightPx = mapAssetData.height * scale
+                
+                // Enable high-quality rendering for map background
+                ctx.imageSmoothingEnabled = true
+                ctx.imageSmoothingQuality = 'high'
+                
+                // Draw the map asset as background
+                ctx.drawImage(mapImg, startX, startY, mapWidthPx, mapHeightPx)
+                
+                // Restore pixel-perfect rendering for other elements
+                ctx.imageSmoothingEnabled = false
+                ctx.restore()
+                
+                if (isDebugLoggingEnabled()) {
+                  console.log('✅ Map asset background rendered (cached):', mapAssetData.name)
+                }
+              } else {
+                // Create a new image and cache it
+                mapImg.onload = () => {
+                  // Cache the loaded image in the DOM for reuse
+                  mapImg.setAttribute('data-asset-id', mapAssetData.id)
+                  mapImg.style.display = 'none'
+                  document.body.appendChild(mapImg)
+                  
+                  ctx.save()
+                  
+                  // Calculate map position and size in screen coordinates with alignment offset
+                  const { bounds, offsetX, offsetY } = currentMapAsset
+                  const { sx: startX, sy: startY } = worldToScreen(bounds.minX + offsetX, bounds.minY + offsetY)
+                  
+                  // Use the actual image dimensions scaled to match tile size
+                  const mapWidthPx = mapAssetData.width * scale
+                  const mapHeightPx = mapAssetData.height * scale
+                  
+                  // Enable high-quality rendering for map background
+                  ctx.imageSmoothingEnabled = true
+                  ctx.imageSmoothingQuality = 'high'
+                  
+                  // Draw the map asset as background
+                  ctx.drawImage(mapImg, startX, startY, mapWidthPx, mapHeightPx)
+                  
+                  // Restore pixel-perfect rendering for other elements
+                  ctx.imageSmoothingEnabled = false
+                  ctx.restore()
+                  
+                  if (isDebugLoggingEnabled()) {
+                    console.log('✅ Map asset background rendered (new):', mapAssetData.name)
+                  }
+                  
+                  // Trigger a redraw to update the display
+                  scheduleDraw()
+                }
+                mapImg.onerror = () => {
+                  console.warn('Failed to load map asset image:', mapAssetData.src)
+                }
+                mapImg.src = mapAssetData.src
+              }
+            }
+          } catch (error) {
+            console.error('Error rendering map asset background:', error)
+          }
         }
       
       // Only draw grid lines if grid is visible
@@ -725,8 +852,14 @@ export default function Game() {
         // Pan with middle mouse button
         const dx = px - lastX
         const dy = py - lastY
-        offsetX += dx
-        offsetY += dy
+        const newOffsetX = offsetX + dx
+        const newOffsetY = offsetY + dy
+        
+        // Apply bounded camera constraints
+        const constrainedOffset = constrainCamera(newOffsetX, newOffsetY, scale)
+        offsetX = constrainedOffset.offsetX
+        offsetY = constrainedOffset.offsetY
+        
         lastX = px
         lastY = py
         
@@ -776,8 +909,13 @@ export default function Game() {
       
       if (scale !== oldScale) {
         // Adjust offset to zoom around mouse position
-        offsetX = px - (px - offsetX) * (scale / oldScale)
-        offsetY = py - (py - offsetY) * (scale / oldScale)
+        const newOffsetX = px - (px - offsetX) * (scale / oldScale)
+        const newOffsetY = py - (py - offsetY) * (scale / oldScale)
+        
+        // Apply bounded camera constraints
+        const constrainedOffset = constrainCamera(newOffsetX, newOffsetY, scale)
+        offsetX = constrainedOffset.offsetX
+        offsetY = constrainedOffset.offsetY
         
         // Update the camera transform ref and state
         cameraTransformRef.current = { scale, offsetX, offsetY }
@@ -827,13 +965,16 @@ export default function Game() {
       if (zoomDebounceTimer) clearTimeout(zoomDebounceTimer)
       if (cacheCleanupInterval) clearInterval(cacheCleanupInterval)
     }
-  }, [isGridVisible, isSnapToGrid, layerSettings])
+  }, [isGridVisible, isSnapToGrid, layerSettings, assets])
 
   return (
     <div className="workspace">
       {/* Sidebar */}
       <div className="sidebar">
         <FileOperationsPanel />
+        
+        {/* Map Asset Panel - Hidden behind experimental settings */}
+        {isMapAssetsEnabled && <MapAssetPanel />}
         
         {/* Clear Map Button */}
         <div className="toolbar-section">

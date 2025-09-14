@@ -56,7 +56,8 @@ export const useAssetStore = create<AssetState>((set, get) => ({
       const defaultAssets = (data.assets || []).map((asset: any) => ({
         ...asset,
         gridWidth: asset.gridWidth || 1,
-        gridHeight: asset.gridHeight || 1
+        gridHeight: asset.gridHeight || 1,
+        type: asset.type || 'regular' // Ensure backward compatibility
       }))
       
       set(state => ({

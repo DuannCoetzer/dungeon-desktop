@@ -46,6 +46,8 @@ export interface Asset {
   gridHeight: number
   // Asset category for organization
   category?: string
+  // Asset type - 'regular' for normal placeable assets, 'map' for canvas background maps
+  type?: 'regular' | 'map'
 }
 
 export interface AssetInstance {

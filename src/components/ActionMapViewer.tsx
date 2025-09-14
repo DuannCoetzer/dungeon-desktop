@@ -963,11 +963,14 @@ export function ActionMapViewer({ mapData, onMoveCharacter, onPlaceCharacter, se
       const deltaX = event.clientX - lastMouse.x
       const deltaY = event.clientY - lastMouse.y
       
-      setViewport(prev => ({
-        ...prev,
-        x: prev.x + deltaX,
-        y: prev.y + deltaY
-      }))
+      const newViewport = {
+        ...viewport,
+        x: viewport.x + deltaX,
+        y: viewport.y + deltaY
+      }
+      
+      // Apply bounded constraints
+      setViewport(constrainViewport(newViewport))
       
       setLastMouse({ x: event.clientX, y: event.clientY })
     }
@@ -1033,36 +1036,109 @@ export function ActionMapViewer({ mapData, onMoveCharacter, onPlaceCharacter, se
     const newX = mouseX - (mouseX - viewport.x) * scaleChange
     const newY = mouseY - (mouseY - viewport.y) * scaleChange
     
-    setViewport({
+    const newViewport = {
       x: newX,
       y: newY,
       scale: newScale
-    })
+    }
+    
+    // Apply bounded constraints
+    setViewport(constrainViewport(newViewport))
   }, [viewport, isDraggingCharacter])
 
-  const handleResetView = () => {
-    if (!canvasRef.current || !mapData) return
-    
-    // Calculate map bounds
-    const allKeys = [
-      ...Object.keys(mapData.tiles.floor || {}),
-      ...Object.keys(mapData.tiles.walls || {})
-    ]
-    
-    if (allKeys.length === 0) return
+  // Helper function to calculate map content bounds (same logic as PNG export)
+  const calculateMapBounds = () => {
+    if (!mapData) return null
     
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
+    let hasContent = false
     
-    for (const key of allKeys) {
+    // Find bounds from tiles
+    const allTileKeys = [
+      ...Object.keys(mapData.tiles.floor || {}),
+      ...Object.keys(mapData.tiles.walls || {}),
+      ...Object.keys(mapData.tiles.objects || {})
+    ]
+    
+    for (const key of allTileKeys) {
       const [x, y] = key.split(',').map(Number)
       minX = Math.min(minX, x)
       minY = Math.min(minY, y)
-      maxX = Math.max(maxX, x)
-      maxY = Math.max(maxY, y)
+      maxX = Math.max(maxX, x + 1) // Add 1 to include the full tile
+      maxY = Math.max(maxY, y + 1)
+      hasContent = true
     }
     
-    const mapWidth = (maxX - minX + 1) * TILE_SIZE
-    const mapHeight = (maxY - minY + 1) * TILE_SIZE
+    // Include assets in bounds calculation
+    if (mapData.assetInstances) {
+      for (const instance of mapData.assetInstances) {
+        // For assets, we don't have grid size in the JSON, so assume 1x1
+        const assetMinX = Math.floor(instance.x)
+        const assetMinY = Math.floor(instance.y)
+        const assetMaxX = assetMinX + 1
+        const assetMaxY = assetMinY + 1
+        
+        minX = Math.min(minX, assetMinX)
+        minY = Math.min(minY, assetMinY)
+        maxX = Math.max(maxX, assetMaxX)
+        maxY = Math.max(maxY, assetMaxY)
+        hasContent = true
+      }
+    }
+    
+    // If no content, return null for unbounded
+    if (!hasContent) return null
+    
+    // Add minimal padding to ensure clean edges
+    const padding = 1
+    return {
+      minX: minX - padding,
+      minY: minY - padding,
+      maxX: maxX + padding,
+      maxY: maxY + padding
+    }
+  }
+  
+  // Helper function to constrain viewport within map bounds
+  const constrainViewport = (newViewport: ViewportState) => {
+    const bounds = calculateMapBounds()
+    
+    // If no bounds, allow unlimited movement (infinite canvas)
+    if (!bounds) return newViewport
+    
+    const canvas = canvasRef.current
+    if (!canvas) return newViewport
+    
+    // Calculate map dimensions in pixels
+    const mapWidthPx = (bounds.maxX - bounds.minX) * TILE_SIZE * newViewport.scale
+    const mapHeightPx = (bounds.maxY - bounds.minY) * TILE_SIZE * newViewport.scale
+    
+    // Calculate boundaries for viewport offset
+    // Viewport can't pan beyond showing empty space
+    const minViewportX = Math.min(canvas.width - mapWidthPx, bounds.minX * TILE_SIZE * newViewport.scale)
+    const maxViewportX = Math.max(0, -bounds.minX * TILE_SIZE * newViewport.scale)
+    const minViewportY = Math.min(canvas.height - mapHeightPx, bounds.minY * TILE_SIZE * newViewport.scale)
+    const maxViewportY = Math.max(0, -bounds.minY * TILE_SIZE * newViewport.scale)
+    
+    // Constrain the viewport within bounds
+    const constrainedX = Math.max(minViewportX, Math.min(maxViewportX, newViewport.x))
+    const constrainedY = Math.max(minViewportY, Math.min(maxViewportY, newViewport.y))
+    
+    return {
+      ...newViewport,
+      x: constrainedX,
+      y: constrainedY
+    }
+  }
+  
+  const handleResetView = () => {
+    if (!canvasRef.current || !mapData) return
+    
+    const bounds = calculateMapBounds()
+    if (!bounds) return // No content to fit
+    
+    const mapWidth = (bounds.maxX - bounds.minX) * TILE_SIZE
+    const mapHeight = (bounds.maxY - bounds.minY) * TILE_SIZE
     
     const canvas = canvasRef.current
     const canvasWidth = canvas.width
@@ -1072,17 +1148,20 @@ export function ActionMapViewer({ mapData, onMoveCharacter, onPlaceCharacter, se
     const scaleY = canvasHeight / mapHeight
     const scale = Math.min(scaleX, scaleY, 1.0) * 0.8 // Leave some padding
     
-    const centerX = (minX + maxX) / 2 * TILE_SIZE
-    const centerY = (minY + maxY) / 2 * TILE_SIZE
+    const centerX = (bounds.minX + bounds.maxX) / 2 * TILE_SIZE
+    const centerY = (bounds.minY + bounds.maxY) / 2 * TILE_SIZE
     
     const viewportX = canvasWidth / 2 - centerX * scale
     const viewportY = canvasHeight / 2 - centerY * scale
     
-    setViewport({
+    const newViewport = {
       x: viewportX,
       y: viewportY,
       scale
-    })
+    }
+    
+    // Apply constraints to ensure we stay within bounds
+    setViewport(constrainViewport(newViewport))
   }
 
   // Handle canvas resize with improved debouncing
